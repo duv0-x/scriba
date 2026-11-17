@@ -67,6 +67,9 @@ templ sidebar(sh shell) {
 			<nav class="nav">
 				<a href="/" class={ templ.KV("on", sh.Current == "" && sh.View == "") }>Actividad</a>
 				<a href="/conectores" class={ templ.KV("on", sh.View == "conectores") }>Conectores</a>
+				if sh.Agents {
+					<a href="/agentes" class={ templ.KV("on", sh.View == "agentes") }>Agentes</a>
+				}
 			</nav>
 		</div>
 		<div>

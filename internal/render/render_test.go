@@ -1,6 +1,7 @@
 package render
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -85,14 +86,24 @@ func TestResolverNil(t *testing.T) {
 	}
 }
 
-// El ancla de [[nota#Sección]] debe coincidir con el id que WithAutoHeadingID da al heading.
+// El ancla de [[nota#Sección]] debe coincidir con el id Unicode del heading (escapado en el href).
 func TestAnclaCoincideConHeading(t *testing.T) {
 	_, hs := render(t, "## Mi Sección\n", res)
-	if len(hs) != 1 || hs[0].ID == "" {
+	if len(hs) != 1 || hs[0].ID != "mi-sección" {
 		t.Fatalf("headings: %+v", hs)
 	}
 	out, _ := render(t, "[[adr-001#Mi Sección]]", res)
-	if want := `href="/n/decisions/personal/adr-001.md#` + hs[0].ID + `"`; !strings.Contains(out, want) {
+	if want := `href="/n/decisions/personal/adr-001.md#` + url.PathEscape(hs[0].ID) + `"`; !strings.Contains(out, want) {
 		t.Errorf("falta %q en %q", want, out)
+	}
+}
+
+func TestHeadingsRepetidos(t *testing.T) {
+	out, hs := render(t, "## Contexto\n\n## Contexto\n", res)
+	if len(hs) != 2 || hs[0].ID != "contexto" || hs[1].ID != "contexto-1" {
+		t.Fatalf("headings: %+v", hs)
+	}
+	if !strings.Contains(out, `id="contexto-1"`) {
+		t.Errorf("falta id=\"contexto-1\" en %q", out)
 	}
 }

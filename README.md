@@ -27,6 +27,19 @@ Para tu propia instancia necesitas una OAuth App:
 
 El token se guarda cifrado en la instancia (ver [ADR-006](docs/adr/ADR-006-conector-github-y-secretos.md)).
 
+## Conectar un agente
+
+Los agentes leen y escriben por MCP en `/mcp`. Cada agente usa su propio token:
+
+1. En **Agentes** crea uno con un nombre (`claude-code-mac`, `opencode-pi`…). El token se muestra una sola vez; también puedes usar `scriba token create <nombre> --data <dir>`.
+2. Regístralo en tu cliente. En Claude Code:
+
+   ```sh
+   claude mcp add --transport http scriba https://<tu-instancia>/mcp --header "Authorization: Bearer scb_…"
+   ```
+
+Cada escritura queda como un commit con el agente como autor (`claude-code-mac via Scriba`). Si GitHub está conectado con push automático, los commits se empujan cada 30 s. Ver [ADR-007](docs/adr/ADR-007-mcp-y-tokens-de-agente.md).
+
 ## Diseño
 
 Ver [`docs/design/README.md`](docs/design/README.md). Las decisiones de arquitectura viven en [`docs/adr/`](docs/adr/).

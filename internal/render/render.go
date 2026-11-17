@@ -9,12 +9,13 @@ import (
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	"go.abhg.dev/goldmark/wikilink"
+
+	"github.com/duv0-x/scriba/internal/mdparse"
 )
 
 // Resolver traduce el destino crudo de un wikilink ("adr-001", "decisions/x") a la ruta de la nota en el vault.
@@ -28,12 +29,7 @@ type Heading struct{ ID, Text string }
 // HTML convierte el Body de una nota a HTML seguro y devuelve el índice de h2.
 func HTML(body string, r Resolver) (template.HTML, []Heading, error) {
 	// Se arma un goldmark por llamada porque el renderer de wikilinks depende del Resolver.
-	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM),
-		goldmark.WithParserOptions(
-			parser.WithAutoHeadingID(),
-			parser.WithInlineParsers(util.Prioritized(&wikilink.Parser{}, 199)),
-		),
+	md := mdparse.New(
 		goldmark.WithRendererOptions(
 			// Sin html.WithUnsafe(): el HTML crudo del Markdown se omite.
 			renderer.WithNodeRenderers(util.Prioritized(&wikilinkRenderer{r: r}, 199)),
@@ -41,7 +37,7 @@ func HTML(body string, r Resolver) (template.HTML, []Heading, error) {
 	)
 
 	src := []byte(body)
-	doc := md.Parser().Parse(text.NewReader(src))
+	doc := md.Parser().Parse(text.NewReader(src), parser.WithContext(mdparse.NewContext()))
 
 	var headings []Heading
 	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
@@ -79,12 +75,11 @@ func (w *wikilinkRenderer) render(out util.BufWriter, _ []byte, node ast.Node, e
 		return ast.WalkContinue, nil
 	}
 	n := node.(*wikilink.Node)
-	// En celdas de tabla GFM el alias va como [[destino\|alias]] y el parser deja la '\' en el Target.
-	target := strings.TrimSuffix(string(n.Target), "\\")
+	target := mdparse.Target(n)
 	frag := ""
 	if len(n.Fragment) > 0 {
-		// Mismo algoritmo de IDs que WithAutoHeadingID, para que el ancla coincida con el id del heading.
-		frag = "#" + url.PathEscape(string(parser.NewContext().IDs().Generate(n.Fragment, ast.KindHeading)))
+		// Mismo Slug que los ids de los headings, para que el ancla coincida.
+		frag = "#" + url.PathEscape(mdparse.Slug(string(n.Fragment)))
 	}
 	if target == "" && frag != "" {
 		// [[#Sección]]: ancla dentro de la propia nota.

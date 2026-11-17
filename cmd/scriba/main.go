@@ -13,6 +13,7 @@ const usage = `uso: scriba <comando> [flags]
 
 comandos:
   serve    sirve el vault (--vault <dir> obligatorio)
+  token    crea, lista o revoca tokens de agente (create|list|revoke)
   version  imprime la versión
 `
 
@@ -31,6 +32,8 @@ func run(args []string) int {
 		return 0
 	case "serve":
 		return serve(args[1:])
+	case "token":
+		return token(args[1:])
 	default:
 		fmt.Fprint(os.Stderr, usage)
 		return 2

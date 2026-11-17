@@ -1,0 +1,77 @@
+package web
+
+// agentsPage lista los tokens de agente; si v.Token viene relleno, lo muestra una sola vez.
+templ agentsPage(v agentsView) {
+	<div class="setup">
+		<div>
+			<h1>Agentes</h1>
+			<p class="sub">Cada agente usa su propio token para leer y escribir por MCP. El token solo se muestra al crearlo.</p>
+		</div>
+		if v.Msg != "" {
+			<p class="alert" role="alert">{ v.Msg }</p>
+		}
+		if v.Token != "" {
+			<section class="conn hl">
+				<div class="conn-head">
+					<h2>Token de <code>{ v.Created }</code></h2>
+				</div>
+				<div class="row">
+					<code class="secret">{ v.Token }</code>
+					@copyButton(v.Token)
+				</div>
+				<p class="note">Guárdalo ahora: no se vuelve a mostrar.</p>
+				<h3>Conectar Claude Code</h3>
+				<div class="row">
+					<code class="secret">{ v.Command }</code>
+					@copyButton(v.Command)
+				</div>
+			</section>
+		}
+		<section class="conn">
+			<h2>Tokens</h2>
+			if len(v.Tokens) == 0 {
+				<p class="desc">Todavía no hay agentes.</p>
+			} else {
+				<table class="tokens">
+					<thead>
+						<tr><th>Nombre</th><th>Creado</th><th>Último uso</th><th>Estado</th><td></td></tr>
+					</thead>
+					<tbody>
+						for _, t := range v.Tokens {
+							<tr>
+								<td><code>{ t.Name }</code></td>
+								<td>{ t.Created.Format("2006-01-02") }</td>
+								<td>{ ago(t.LastUsed) }</td>
+								<td>
+									if t.Revoked {
+										<span class="pill">revocado</span>
+									} else {
+										<span class="pill ok">activo</span>
+									}
+								</td>
+								<td>
+									if !t.Revoked {
+										<form method="post" action="/agentes/revocar">
+											<button class="btn danger" type="submit" name="name" value={ t.Name }>Revocar</button>
+										</form>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			}
+		</section>
+		<section class="conn">
+			<h2>Nuevo agente</h2>
+			<form method="post" action="/agentes" class="row">
+				<input type="text" name="name" required placeholder="claude-code-mac" pattern="[a-z0-9][a-z0-9\-]{0,39}" maxlength="40" autocomplete="off" aria-label="Nombre del agente"/>
+				<button class="btn primary" type="submit">Crear token</button>
+			</form>
+		</section>
+	</div>
+}
+
+templ copyButton(text string) {
+	<button class="btn" type="button" data-copy={ text } onclick="navigator.clipboard.writeText(this.dataset.copy); this.textContent = 'Copiado'">Copiar</button>
+}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/duv0-x/scriba/internal/agents"
 	"github.com/duv0-x/scriba/internal/index"
 	"github.com/duv0-x/scriba/internal/render"
 	"github.com/duv0-x/scriba/internal/state"
@@ -37,7 +38,9 @@ type Server struct {
 	GitHub     GitHubAPI
 	Git        GitOps
 	ClientID   string
-	OnImported func() // tras crear/importar el vault (reindexar); puede ser nil
+	OnImported func()        // tras crear/importar el vault (reindexar); puede ser nil
+	Agents     *agents.Store // nil = sin pantalla de agentes
+	PublicURL  string        // base para el comando de Claude Code; "" = host de la petición
 
 	mu  sync.Mutex
 	dev *pendingDevice // device flow de GitHub en curso
@@ -69,6 +72,9 @@ func (s *Server) Handler() http.Handler {
 		return mux
 	}
 	s.setupRoutes(mux)
+	if s.Agents != nil {
+		s.agentRoutes(mux)
+	}
 	return sameOrigin(s.gate(mux))
 }
 
@@ -148,7 +154,7 @@ func (s *Server) readNote(p string) (*vault.Note, error) {
 		return nil, fs.ErrNotExist
 	}
 	for _, seg := range strings.Split(p, "/") {
-		if strings.HasPrefix(seg, ".") || seg == "_templates" {
+		if strings.HasPrefix(seg, ".") || strings.EqualFold(seg, "_templates") {
 			return nil, fs.ErrNotExist
 		}
 	}
@@ -177,7 +183,8 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 // shell son los datos de la sidebar, comunes a todas las páginas.
 type shell struct {
 	Current string
-	View    string // vista de la sidebar marcada fuera del lector ("conectores", "bienvenida")
+	View    string // vista de la sidebar marcada fuera del lector ("conectores", "agentes", "bienvenida")
+	Agents  bool   // hay pantalla de agentes
 	Tree    []treeNode
 }
 
@@ -186,7 +193,7 @@ func (s *Server) shell(current string) (shell, error) {
 	if err != nil {
 		return shell{}, err
 	}
-	return shell{Current: current, Tree: buildTree(refs, current)}, nil
+	return shell{Current: current, Agents: s.Agents != nil, Tree: buildTree(refs, current)}, nil
 }
 
 var singulars = map[string]string{

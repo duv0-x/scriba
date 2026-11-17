@@ -110,8 +110,19 @@ templ ghCard(v ghView) {
 							Push automático después de cada commit
 							<button class="switch" type="submit" name="push" value={ toggleValue(v.Conn.Push) } role="switch" aria-checked={ boolAttr(v.Conn.Push) } aria-label="Push automático después de cada commit"></button>
 						</form>
-						<p class="note">Se activa cuando los agentes empiecen a escribir</p>
 					</dd>
+					<dt>Último push</dt>
+					<dd>
+						if v.Conn.LastPush != "" {
+							{ v.Conn.LastPush }
+						} else {
+							aún no
+						}
+					</dd>
+					if v.Conn.LastError != "" {
+						<dt>Error</dt>
+						<dd class="bad">{ v.Conn.LastError }</dd>
+					}
 				</dl>
 			}
 			<form method="post" action="/conectores/github/desconectar" class="end">

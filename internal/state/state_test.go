@@ -91,3 +91,33 @@ func TestReabrirConservaDatos(t *testing.T) {
 		t.Fatalf("conector tras reabrir: %+v %v %v", c, ok, err)
 	}
 }
+
+func TestUpdatePushResult(t *testing.T) {
+	s := open(t, filepath.Join(t.TempDir(), "state.db"))
+	if ok, err := s.UpdatePushResult("github", "x", ""); ok || err != nil {
+		t.Fatalf("sin conector: ok=%v err=%v", ok, err)
+	}
+	c := Connector{Name: "github", Account: "a", Secret: []byte{9}, Repo: "a/kb", Push: true}
+	if err := s.SaveConnector(c); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.UpdatePushResult("github", "hoy · abc", ""); !ok || err != nil {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if ok, err := s.UpdatePushResult("github", "", "boom"); !ok || err != nil {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	got, _, _ := s.Connector("github")
+	if got.LastPush != "hoy · abc" || got.LastError != "boom" || got.Repo != "a/kb" || !got.Push || !bytes.Equal(got.Secret, c.Secret) {
+		t.Fatalf("conector: %+v", got)
+	}
+	if err := s.DeleteConnector("github"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.UpdatePushResult("github", "z", ""); ok || err != nil {
+		t.Fatalf("tras borrar: ok=%v err=%v", ok, err)
+	}
+	if _, ok, _ := s.Connector("github"); ok {
+		t.Fatal("UpdatePushResult recreó el conector")
+	}
+}

@@ -6,20 +6,26 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/duv0-x/scriba/internal/agents"
 	"github.com/duv0-x/scriba/internal/github"
+	"github.com/duv0-x/scriba/internal/gitvault"
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/mcp"
 	"github.com/duv0-x/scriba/internal/secrets"
 	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
 	"github.com/duv0-x/scriba/internal/watch"
 	"github.com/duv0-x/scriba/internal/web"
+	"github.com/duv0-x/scriba/internal/writer"
 )
 
 func serve(args []string) int {
@@ -28,6 +34,8 @@ func serve(args []string) int {
 	db := fs.String("db", "", "ruta de la base SQLite (default: scriba.db junto al vault)")
 	listen := fs.String("listen", "127.0.0.1:8090", "dirección de escucha HTTP")
 	clientID := fs.String("github-client-id", github.DefaultClientID, "client_id (público) de la OAuth App de GitHub con Device Flow")
+	publicURL := fs.String("public-url", "", "URL pública de la instancia (para enlaces de kb_open y el comando de conexión); vacío = la de cada petición")
+	tz := fs.String("tz", "America/Bogota", "zona horaria del journal")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -36,14 +44,27 @@ func serve(args []string) int {
 		fs.Usage()
 		return 2
 	}
-	if err := runServe(*vaultDir, *db, *listen, *clientID); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := runServe(ctx, serveOpts{vault: *vaultDir, db: *db, listen: *listen, clientID: *clientID, publicURL: *publicURL, tz: *tz}); err != nil {
 		slog.Error("serve", "err", err)
 		return 1
 	}
 	return 0
 }
 
-func runServe(vaultDir, db, listen, clientID string) error {
+type serveOpts struct {
+	vault, db, listen, clientID, publicURL, tz string
+	ln                                         net.Listener // si no es nil se usa en vez de listen (tests)
+}
+
+// runServe sirve hasta que ctx se cancele o el watcher muera.
+func runServe(ctx context.Context, o serveOpts) error {
+	vaultDir, db, listen, clientID := o.vault, o.db, o.listen, o.clientID
+	loc, err := time.LoadLocation(o.tz)
+	if err != nil {
+		return fmt.Errorf("--tz: %w", err)
+	}
 	// Una instancia nueva arranca sin vault: lo crea el onboarding.
 	if err := os.MkdirAll(vaultDir, 0o755); err != nil {
 		return err
@@ -83,29 +104,63 @@ func runServe(vaultDir, db, listen, clientID string) error {
 	}
 	slog.Info("índice listo", "notas", n, "duración", time.Since(start).Round(time.Millisecond), "vault", v.Root)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ln := o.ln
+	if ln == nil {
+		if ln, err = net.Listen("tcp", listen); err != nil {
+			return err
+		}
+	}
+
+	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 
 	watchDone := make(chan error, 1)
 	go func() { watchDone <- watch.Run(ctx, v, ix, nil) }()
 
-	srv := &http.Server{
-		Addr: listen,
-		Handler: (&web.Server{
-			V: v, Ix: ix, State: st, Key: key,
-			GitHub: github.New(), Git: web.GitVault{}, ClientID: clientID,
-			OnImported: func() {
-				if err := ix.Rebuild(v); err != nil {
-					slog.Error("reconstruir índice tras importar", "err", err)
-				}
-			},
-		}).Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
+	// Push a GitHub tras cada commit de un agente; el ciclo comprueba al ejecutarse si el
+	// conector sigue activo con push. gitMu evita que el commit del writer y el
+	// pull --rebase del Pusher choquen en el repo.
+	var gitMu sync.Mutex
+	pusher := gitvault.NewPusher(v.Root, func() (gitvault.Cred, bool) { return githubCred(st, key) }, 30*time.Second,
+		func(hash string, err error) { recordPush(st, hash, err) })
+	pusher.Lock = &gitMu
+	defer pusher.Close()
+	wr := writer.New(writer.Config{V: v, Ix: ix, Act: st, Loc: loc, GitMu: &gitMu, Push: pusher.Trigger})
+	// Commits que quedaron sin empujar (p. ej. un apagado antes del ciclo): se empujan al arrancar.
+	if _, push := githubCred(st, key); push && gitvault.IsRepo(v.Root) {
+		if ahead, _, err := gitvault.Status(ctx, v.Root); err != nil {
+			slog.Warn("estado git al arrancar", "err", err)
+		} else if ahead > 0 {
+			pusher.Trigger()
+		}
 	}
+	ag := &agents.Store{S: st}
+
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", mcp.Handler(mcp.Config{V: v, Ix: ix, W: wr, Agents: ag, PublicURL: o.publicURL, Version: version}))
+	mux.Handle("/", (&web.Server{
+		V: v, Ix: ix, State: st, Key: key, Agents: ag, PublicURL: o.publicURL,
+		GitHub: github.New(), Git: web.GitVault{}, ClientID: clientID,
+		OnImported: func() {
+			if err := ix.Rebuild(v); err != nil {
+				slog.Error("reconstruir índice tras importar", "err", err)
+			}
+		},
+	}).Handler())
+	// Shutdown no corta las peticiones en curso: los streams GET/SSE del SDK MCP viven
+	// hasta que se cancela su contexto, y baseCtx se cancela al empezar el apagado.
+	baseCtx, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return baseCtx },
+	}
+	srv.RegisterOnShutdown(cancelBase)
 	serveErr := make(chan error, 1)
 	go func() {
-		slog.Info("escuchando", "addr", listen)
-		serveErr <- srv.ListenAndServe()
+		slog.Info("escuchando", "addr", ln.Addr().String())
+		serveErr <- srv.Serve(ln)
 	}()
 
 	var watchErr error
@@ -143,4 +198,41 @@ func runServe(vaultDir, db, listen, clientID string) error {
 // root debe ser absoluta (vault.Open la normaliza), así "--vault ." no deja la base dentro del vault.
 func defaultDB(root string) string {
 	return filepath.Join(filepath.Dir(root), "scriba.db")
+}
+
+// githubCred descifra el token del conector de GitHub en el momento de usarlo y dice si
+// hay que empujar: false sin conector, con push apagado, sin repo o si el token no descifra.
+func githubCred(st *state.Store, key []byte) (gitvault.Cred, bool) {
+	c, ok, err := st.Connector("github")
+	if err != nil || !ok || !c.Push || c.Repo == "" {
+		return gitvault.Cred{}, false
+	}
+	tok, err := secrets.Open(key, c.Secret)
+	if err != nil {
+		slog.Error("descifrar token de GitHub", "err", err)
+		return gitvault.Cred{}, false
+	}
+	return gitvault.Cred{Token: string(tok)}, true
+}
+
+// recordPush guarda el resultado del último push para mostrarlo en Conectores. Solo
+// actualiza esas columnas: si el conector se borró mientras empujaba, no lo resucita.
+func recordPush(st *state.Store, hash string, err error) {
+	var last, msg string
+	if err != nil {
+		msg = err.Error()
+		slog.Warn("push a GitHub", "err", err)
+	} else {
+		last = time.Now().Format("2006-01-02 15:04") + " · " + shortHash(hash)
+	}
+	if _, err := st.UpdatePushResult("github", last, msg); err != nil {
+		slog.Error("guardar resultado del push", "err", err)
+	}
+}
+
+func shortHash(h string) string {
+	if len(h) > 7 {
+		return h[:7]
+	}
+	return h
 }

@@ -3,12 +3,16 @@ package vault
 import (
 	"fmt"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
+	"go.abhg.dev/goldmark/wikilink"
 	"gopkg.in/yaml.v3"
+
+	"github.com/duv0-x/scriba/internal/mdparse"
 )
 
 // Note es una nota del vault ya parseada.
@@ -28,10 +32,8 @@ type Note struct {
 // KnownTypes son las carpetas de primer nivel que definen el Type de una nota.
 var KnownTypes = []string{"journal", "tickets", "plans", "decisions", "runbooks", "postmortems", "references", "processes", "onboarding", "domains", "services", "clients", "drafts", "learning", "pocs", "docs"}
 
-var (
-	wikilinkRe   = regexp.MustCompile(`\[\[([^\[\]]*)\]\]`)
-	inlineCodeRe = regexp.MustCompile("`[^`]*`")
-)
+// md es el mismo parser que usa el lector (render): solo cuentan los wikilinks que se ven como enlace.
+var md = mdparse.New()
 
 func parse(rel, content string) *Note {
 	n := &Note{Path: rel, Meta: map[string]any{}, Body: content}
@@ -77,7 +79,7 @@ func parse(rel, content string) *Note {
 	}
 
 	n.Tags = parseTags(n.Meta["tags"])
-	n.Links = parseLinks(prose)
+	n.Links = parseLinks(n.Body)
 	n.Words = len(strings.Fields(n.Body))
 	return n
 }
@@ -139,20 +141,19 @@ func proseLines(body string) []string {
 	return out
 }
 
-func parseLinks(prose []string) []string {
+// parseLinks recorre el AST y devuelve los destinos de wikilinks (sin alias ni ancla), sin duplicados y en orden.
+func parseLinks(body string) []string {
 	var links []string
-	for _, l := range prose {
-		l = inlineCodeRe.ReplaceAllString(l, "")
-		for _, m := range wikilinkRe.FindAllStringSubmatch(l, -1) {
-			dest, _, _ := strings.Cut(m[1], "|")
-			dest = strings.TrimSuffix(dest, "\\") // [[destino\|alias]] dentro de una tabla GFM
-			dest, _, _ = strings.Cut(dest, "#")
-			dest = strings.TrimSpace(dest)
-			if dest != "" && !slices.Contains(links, dest) {
+	doc := md.Parser().Parse(text.NewReader([]byte(body)))
+	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if wl, ok := n.(*wikilink.Node); ok && entering {
+			// [[#local]] queda con Target vacío: es un ancla de la propia nota.
+			if dest := strings.TrimSpace(mdparse.Target(wl)); dest != "" && !slices.Contains(links, dest) {
 				links = append(links, dest)
 			}
 		}
-	}
+		return ast.WalkContinue, nil
+	})
 	return links
 }
 

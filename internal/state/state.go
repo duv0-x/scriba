@@ -110,3 +110,16 @@ func (s *Store) DeleteConnector(name string) error {
 	_, err := s.db.Exec("DELETE FROM connectors WHERE name = ?", name)
 	return err
 }
+
+// UpdatePushResult guarda el resultado del último push sin tocar el resto del
+// conector. lastPush vacío conserva el anterior (un fallo no borra el último
+// push bueno). Devuelve false si el conector no existe: nunca lo recrea.
+func (s *Store) UpdatePushResult(name, lastPush, lastError string) (bool, error) {
+	res, err := s.db.Exec("UPDATE connectors SET last_push = COALESCE(NULLIF(?, ''), last_push), last_error = ?, updated = ? WHERE name = ?",
+		lastPush, lastError, time.Now().UnixNano(), name)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}

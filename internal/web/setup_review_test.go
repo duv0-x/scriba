@@ -191,7 +191,7 @@ func TestSinSecretosEnHTML(t *testing.T) {
 	post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil)
 	_, b = get(t, e.h, "/conectores", nil)
 	add(nil, b)
-	if strings.Contains(b, "Último push") || !strings.Contains(b, "Se activa cuando los agentes empiecen a escribir") {
+	if !strings.Contains(b, "Último push") || strings.Contains(b, "Se activa cuando los agentes empiecen a escribir") {
 		t.Errorf("tarjeta conectada:\n%s", b)
 	}
 	for _, b := range bodies {
