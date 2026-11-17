@@ -1,0 +1,158 @@
+package web
+
+// welcomePage es la primera pantalla con la base vacía: crear, importar de GitHub o subir un .zip.
+templ welcomePage(msg string) {
+	<div class="setup">
+		<div>
+			<h1>Bienvenido a Scriba</h1>
+			<p class="sub">Tu base de conocimiento todavía está vacía. Elige cómo empezar.</p>
+		</div>
+		if msg != "" {
+			<p class="alert" role="alert">{ msg }</p>
+		}
+		<section class="conn">
+			<h2>Crear una base nueva</h2>
+			<p class="desc">Estructura recomendada con journal, tickets, decisiones, runbooks y plantillas, en un repositorio git local.</p>
+			<form method="post" action="/bienvenida/nueva">
+				<button class="btn primary" type="submit">Crear base nueva</button>
+			</form>
+		</section>
+		<section class="conn">
+			<h2>Importar desde GitHub</h2>
+			<p class="desc">Conecta tu cuenta y elige el repositorio donde ya vive tu conocimiento.</p>
+			<div><a class="btn" href="/conectores">Ir a Conectores</a></div>
+		</section>
+		@zipCard()
+		<p class="foot">Más adelante podrás conectar otros servicios desde Conectores.</p>
+	</div>
+}
+
+templ zipCard() {
+	<section class="conn">
+		<h2>Subir un .zip</h2>
+		<p class="desc">Para bases de Obsidian o carpetas locales. Máximo 200 MB.</p>
+		<form method="post" action="/bienvenida/zip" enctype="multipart/form-data" class="row">
+			<input type="file" name="zip" accept=".zip,application/zip" required aria-label="Archivo .zip"/>
+			<button class="btn" type="submit">Subir .zip</button>
+		</form>
+	</section>
+}
+
+templ connectorsPage(v ghView) {
+	<div class="setup">
+		<div>
+			<h1>Conectores</h1>
+			<p class="sub">Conecta Scriba con los servicios donde ya vive tu conocimiento. Las credenciales se guardan cifradas en tu instancia.</p>
+		</div>
+		if v.Msg != "" {
+			<p class="alert" role="alert">{ v.Msg }</p>
+		}
+		@ghCard(v)
+		<section class="conn off" aria-disabled="true">
+			<div class="conn-head">
+				<h2>Confluence</h2>
+				<span class="pill">Próximamente</span>
+			</div>
+			<p class="desc">Publica notas maduras en un espacio de Confluence y conserva los wikilinks como enlaces entre páginas.</p>
+			<div><button class="btn" type="button" disabled>Conectar</button></div>
+		</section>
+		if v.VaultEmpty {
+			@zipCard()
+		}
+		<p class="foot">Scriba nunca guarda credenciales en variables de entorno ni en el repositorio.</p>
+	</div>
+}
+
+templ ghCard(v ghView) {
+	<section class="conn">
+		<div class="conn-head">
+			@templ.Raw(githubSVG)
+			<h2>GitHub</h2>
+			if v.Connected {
+				<span class="pill ok">Conectado</span>
+			} else if v.Wait != nil {
+				<span class="pill wait">Esperando autorización</span>
+			} else {
+				<span class="pill">Desconectado</span>
+			}
+		</div>
+		if v.Connected {
+			<p class="desc">Cuenta <b>{ v.Conn.Account }</b> · scope repo</p>
+			if v.Conn.Repo == "" {
+				<form method="post" action="/conectores/github/repo" class="row">
+					<select name="repo" required aria-label="Repositorio">
+						for _, r := range v.Repos {
+							<option value={ r.FullName }>
+								{ r.FullName }
+								if r.Private {
+									· privado
+								}
+							</option>
+						}
+					</select>
+					if v.VaultEmpty {
+						<button class="btn primary" type="submit">Importar este repositorio</button>
+					} else {
+						<button class="btn primary" type="submit">Enlazar</button>
+					}
+				</form>
+			} else {
+				<dl class="kv">
+					<dt>Repositorio</dt>
+					<dd><code>{ v.Conn.Repo }</code>
+						if v.Branch != "" {
+							<span class="pill mono">{ v.Branch }</span>
+						}
+					</dd>
+					<dt>Sincronización</dt>
+					<dd>
+						<form method="post" action="/conectores/github/push" class="row">
+							Push automático después de cada commit
+							<button class="switch" type="submit" name="push" value={ toggleValue(v.Conn.Push) } role="switch" aria-checked={ boolAttr(v.Conn.Push) } aria-label="Push automático después de cada commit"></button>
+						</form>
+						<p class="note">Se activa cuando los agentes empiecen a escribir</p>
+					</dd>
+				</dl>
+			}
+			<form method="post" action="/conectores/github/desconectar" class="end">
+				<button class="btn danger" type="submit">Desconectar</button>
+			</form>
+		} else if v.Wait != nil {
+			@ghWaiting(*v.Wait)
+		} else {
+			<p class="desc">Importa un repositorio como base de conocimiento y publica cada cambio con push automático.</p>
+			if v.NoClientID {
+				<p class="note">Falta configurar el client_id de la OAuth App de Scriba (ver README)</p>
+				<div><button class="btn primary" type="button" disabled>Conectar con GitHub</button></div>
+			} else {
+				@ghStartForm()
+			}
+		}
+	</section>
+}
+
+templ ghStartForm() {
+	<form method="post" action="/conectores/github/iniciar">
+		<button class="btn primary" type="submit">Conectar con GitHub</button>
+	</form>
+}
+
+// ghWaiting es la parte del device flow que htmx refresca; solo lleva el user_code, nunca el device_code.
+templ ghWaiting(d pendingDevice) {
+	<div class="wait" hx-get="/conectores/github/estado" hx-trigger={ pollEvery(d) } hx-swap="outerHTML">
+		<p class="desc">Abre GitHub, pega este código y autoriza a Scriba:</p>
+		<div class="row">
+			<code class="user-code">{ d.userCode }</code>
+			<button class="btn" type="button" data-code={ d.userCode } onclick="navigator.clipboard.writeText(this.dataset.code); this.textContent = 'Copiado'">Copiar</button>
+			<a class="btn primary" href={ verifyURL(d.uri) } target="_blank" rel="noopener noreferrer">Abrir GitHub</a>
+		</div>
+		<p class="note">Scriba pide acceso a tus repositorios (scope repo). Puedes revocarlo cuando quieras desde GitHub → Settings → Applications.</p>
+	</div>
+}
+
+templ ghWaitFailed(msg string) {
+	<div class="wait">
+		<p class="alert" role="alert">{ msg }</p>
+		@ghStartForm()
+	</div>
+}

@@ -13,7 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/duv0-x/scriba/internal/github"
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/secrets"
+	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
 	"github.com/duv0-x/scriba/internal/watch"
 	"github.com/duv0-x/scriba/internal/web"
@@ -24,6 +27,7 @@ func serve(args []string) int {
 	vaultDir := fs.String("vault", "", "directorio del vault (obligatorio)")
 	db := fs.String("db", "", "ruta de la base SQLite (default: scriba.db junto al vault)")
 	listen := fs.String("listen", "127.0.0.1:8090", "dirección de escucha HTTP")
+	clientID := fs.String("github-client-id", github.DefaultClientID, "client_id (público) de la OAuth App de GitHub con Device Flow")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -32,14 +36,18 @@ func serve(args []string) int {
 		fs.Usage()
 		return 2
 	}
-	if err := runServe(*vaultDir, *db, *listen); err != nil {
+	if err := runServe(*vaultDir, *db, *listen, *clientID); err != nil {
 		slog.Error("serve", "err", err)
 		return 1
 	}
 	return 0
 }
 
-func runServe(vaultDir, db, listen string) error {
+func runServe(vaultDir, db, listen, clientID string) error {
+	// Una instancia nueva arranca sin vault: lo crea el onboarding.
+	if err := os.MkdirAll(vaultDir, 0o755); err != nil {
+		return err
+	}
 	v, err := vault.Open(vaultDir)
 	if err != nil {
 		return err
@@ -52,6 +60,18 @@ func runServe(vaultDir, db, listen string) error {
 		return err
 	}
 	defer ix.Close()
+
+	// El estado (conectores, ajustes) y la llave van junto al índice, fuera del vault.
+	dataDir := filepath.Dir(db)
+	st, err := state.Open(filepath.Join(dataDir, "state.db"))
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	key, err := secrets.LoadOrCreateKey(filepath.Join(dataDir, "secret.key"))
+	if err != nil {
+		return err
+	}
 
 	start := time.Now()
 	if err := ix.Rebuild(v); err != nil {
@@ -70,8 +90,16 @@ func runServe(vaultDir, db, listen string) error {
 	go func() { watchDone <- watch.Run(ctx, v, ix, nil) }()
 
 	srv := &http.Server{
-		Addr:              listen,
-		Handler:           (&web.Server{V: v, Ix: ix}).Handler(),
+		Addr: listen,
+		Handler: (&web.Server{
+			V: v, Ix: ix, State: st, Key: key,
+			GitHub: github.New(), Git: web.GitVault{}, ClientID: clientID,
+			OnImported: func() {
+				if err := ix.Rebuild(v); err != nil {
+					slog.Error("reconstruir índice tras importar", "err", err)
+				}
+			},
+		}).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	serveErr := make(chan error, 1)
