@@ -14,11 +14,13 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/a-h/templ"
 
 	"github.com/duv0-x/scriba/internal/index"
 	"github.com/duv0-x/scriba/internal/render"
+	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
 )
 
@@ -29,6 +31,18 @@ var staticFS embed.FS
 type Server struct {
 	V  *vault.Vault
 	Ix *index.Index
+	// PR2: pueden ser nil en los tests del lector; sin State no hay bienvenida ni conectores.
+	State      *state.Store
+	Key        []byte // llave de secrets
+	GitHub     GitHubAPI
+	Git        GitOps
+	ClientID   string
+	OnImported func() // tras crear/importar el vault (reindexar); puede ser nil
+
+	mu  sync.Mutex
+	dev *pendingDevice // device flow de GitHub en curso
+
+	setupMu sync.Mutex // serializa crear base, subir zip, importar/enlazar repo, push y desconectar
 }
 
 // Handler devuelve las rutas del lector.
@@ -51,7 +65,11 @@ func (s *Server) Handler() http.Handler {
 		}
 		_, _ = w.Write([]byte("ok"))
 	})
-	return mux
+	if s.State == nil {
+		return mux
+	}
+	s.setupRoutes(mux)
+	return sameOrigin(s.gate(mux))
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +83,11 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	page(w, r, http.StatusOK, layout(sh, "Scriba", homePage(recent)))
+	aviso := ""
+	if r.URL.Query().Get("aviso") == "historial" {
+		aviso = avisoHistorial
+	}
+	page(w, r, http.StatusOK, layout(sh, "Scriba", homePage(recent, aviso)))
 }
 
 func (s *Server) note(w http.ResponseWriter, r *http.Request) {
@@ -155,6 +177,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 // shell son los datos de la sidebar, comunes a todas las páginas.
 type shell struct {
 	Current string
+	View    string // vista de la sidebar marcada fuera del lector ("conectores", "bienvenida")
 	Tree    []treeNode
 }
 
