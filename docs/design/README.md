@@ -15,6 +15,7 @@
 | Lector de notas con grafo local | ✓ | ✓ |
 | Editor (Markdown + vista previa en vivo) | ✓ | — |
 | Grafo global | — | ✓ |
+| Conectores (GitHub, Confluence, importar .zip) | ✓ | — |
 
 ## Al cambiar el diseño
 

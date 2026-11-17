@@ -1,0 +1,6 @@
+/scriba
+/dist/
+/.bin/
+*.db
+*.db-*
+/tmp/
