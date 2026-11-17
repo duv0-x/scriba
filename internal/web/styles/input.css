@@ -717,6 +717,7 @@
     padding-top: 14px;
   }
   .conn select,
+  .conn input[type="text"],
   .conn input[type="file"] {
     min-width: 260px;
     padding: 7px 10px;
@@ -798,6 +799,50 @@
     cursor: not-allowed;
     border-color: var(--line);
     color: var(--muted);
+  }
+  .conn.hl {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .conn h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 4px 0 0;
+  }
+  .secret {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font: 13px var(--font-mono);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--code-bg);
+  }
+  .tokens {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+  .tokens th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 12px 8px 0;
+  }
+  .tokens td {
+    padding: 10px 12px 10px 0;
+    border-top: 1px solid var(--line);
+  }
+  .tokens td:last-child {
+    text-align: right;
+    padding-right: 0;
+  }
+  .tokens code {
+    font-family: var(--font-mono);
+    font-weight: 500;
   }
   .user-code {
     font-family: var(--font-mono);

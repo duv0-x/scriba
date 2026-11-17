@@ -12,9 +12,14 @@ const pushTimeout = 2 * time.Minute
 // Pusher agrupa varios Trigger en un solo pull --rebase + push.
 type Pusher struct {
 	dir      string
-	cred     func() Cred
+	cred     func() (Cred, bool)
 	every    time.Duration
 	onResult func(hash string, err error)
+
+	// Lock, si no es nil, se toma alrededor de pull+push; compártelo con quien
+	// haga commits en dir para que dos git no choquen en .git/index.lock.
+	// Fíjalo antes del primer Trigger.
+	Lock sync.Locker
 
 	mu     sync.Mutex
 	timer  *time.Timer
@@ -23,8 +28,10 @@ type Pusher struct {
 	wg     sync.WaitGroup
 }
 
-// NewPusher crea un Pusher; cred se consulta en cada ciclo para usar el token vigente.
-func NewPusher(dir string, cred func() Cred, every time.Duration, onResult func(hash string, err error)) *Pusher {
+// NewPusher crea un Pusher. cred se consulta en cada ciclo para usar el token
+// vigente y decidir si empujar: si devuelve false (sin conector, push apagado
+// o sin repo) el ciclo no hace nada.
+func NewPusher(dir string, cred func() (Cred, bool), every time.Duration, onResult func(hash string, err error)) *Pusher {
 	return &Pusher{dir: dir, cred: cred, every: every, onResult: onResult}
 }
 
@@ -49,7 +56,13 @@ func (p *Pusher) run() {
 	defer p.op.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
 	defer cancel()
-	cred := p.cred()
+	cred, ok := p.cred()
+	if !ok {
+		return
+	}
+	if p.Lock != nil {
+		p.Lock.Lock()
+	}
 	err := Pull(ctx, p.dir, cred)
 	if err == nil {
 		err = Push(ctx, p.dir, cred)
@@ -57,6 +70,9 @@ func (p *Pusher) run() {
 	var hash string
 	if err == nil {
 		hash, err = Head(p.dir)
+	}
+	if p.Lock != nil {
+		p.Lock.Unlock()
 	}
 	if p.onResult != nil {
 		p.onResult(hash, err)

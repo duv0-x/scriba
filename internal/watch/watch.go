@@ -83,7 +83,7 @@ func Run(ctx context.Context, v *vault.Vault, ix *index.Index, onChange func(pat
 
 // skipDir replica el criterio de vault.Walk: ocultos (.git, .obsidian…), _templates y node_modules.
 func skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || name == "_templates" || name == "node_modules"
+	return strings.HasPrefix(name, ".") || strings.EqualFold(name, "_templates") || strings.EqualFold(name, "node_modules")
 }
 
 // isNote descarta temporales de editores (.foo.md, foo.md~, foo.md.swp) y todo lo que no sea .md.
@@ -149,7 +149,11 @@ func process(v *vault.Vault, ix *index.Index, abs string, onChange func(string))
 			slog.Warn("watch: no se pudo borrar del índice", "path", rel, "err", err)
 		}
 	} else if n, err := v.Read(rel); err != nil {
-		slog.Warn("watch: nota ilegible", "path", rel, "err", err)
+		// Ilegible (p. ej. ahora es un symlink a .git/config): no puede quedar su versión vieja en el índice.
+		slog.Warn("watch: nota ilegible, se quita del índice", "path", rel, "err", err)
+		if err := ix.Delete(rel); err != nil {
+			slog.Warn("watch: no se pudo borrar del índice", "path", rel, "err", err)
+		}
 	} else if err := ix.Upsert(n); err != nil {
 		slog.Warn("watch: no se pudo indexar", "path", rel, "err", err)
 	}

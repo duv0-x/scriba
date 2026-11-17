@@ -138,3 +138,45 @@ func TestRun(t *testing.T) {
 		t.Fatal("Run no terminó tras cancelar")
 	}
 }
+
+// Una nota indexada que pasa a ser un symlink a una zona oculta sale del índice.
+func TestNotaIlegibleSaleDelIndice(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, ".git", "config"), "[core] secreto")
+	a := filepath.Join(root, "notes", "a.md")
+	write(t, a, "nota visible")
+	v, err := vault.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix, err := index.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ix.Close() })
+	if err := ix.Rebuild(v); err != nil {
+		t.Fatal(err)
+	}
+	if !found(t, ix, "visible", "notes/a.md") {
+		t.Fatal("notes/a.md no quedó indexada")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, v, ix, nil) }()
+	t.Cleanup(func() { cancel(); <-done })
+	time.Sleep(100 * time.Millisecond) // shortcut: deja que Run registre los watches antes de tocar archivos
+
+	// El symlink reemplaza a la nota de forma atómica: la ruta nunca deja de existir.
+	tmp := filepath.Join(root, "notes", "tmp-link")
+	if err := os.Symlink("../.git/config", tmp); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, a); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "notes/a.md fuera del índice", func() bool { return !found(t, ix, "visible", "notes/a.md") })
+	if found(t, ix, "secreto", "notes/a.md") {
+		t.Fatal("se indexó el contenido de .git/config")
+	}
+}

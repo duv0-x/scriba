@@ -176,3 +176,90 @@ func TestLinksEnTabla(t *testing.T) {
 		t.Fatalf("Links = %q, want [adr-001]", n.Links)
 	}
 }
+
+// TestIaKB es una prueba de humo opcional contra un vault real (solo lectura).
+// Se activa con SCRIBA_REAL_VAULT=/ruta/al/vault.
+func TestIaKB(t *testing.T) {
+	root := os.Getenv("SCRIBA_REAL_VAULT")
+	if root == "" {
+		t.Skip("SCRIBA_REAL_VAULT no definida")
+	}
+	v, err := Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var notes, links, fails int
+	if err := v.Walk(func(rel string) error {
+		n, err := v.Read(rel)
+		if err != nil {
+			fails++
+			t.Logf("no se pudo leer %s: %v", rel, err)
+			return nil
+		}
+		notes++
+		links += len(n.Links)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("notas=%d links=%d fallos=%d", notes, links, fails)
+}
+
+// Los wikilinks que el lector muestra como código o no muestra no cuentan como enlaces.
+func TestLinksSoloVisibles(t *testing.T) {
+	body := "[[visible]] y [[visible#Sección|alias]] y [[#local]]\n\n" +
+		"    [[indentado]]\n\n" +
+		"<!-- [[comentario]] -->\n\n" +
+		"````\n```\n[[en-fence]]\n```\n````\n\n" +
+		"<div>\n[[html-crudo]]\n</div>\n\n" +
+		"`[[inline]]` y ![[embebido]]\n\n" +
+		"| a |\n|---|\n| [[tabla\\|alias]] |\n"
+	want := []string{"visible", "embebido", "tabla"}
+	if got := parse("x.md", body).Links; !slices.Equal(got, want) {
+		t.Fatalf("Links = %q, want %q", got, want)
+	}
+}
+
+// Un directorio intermedio que es symlink hacia fuera (o a una zona oculta) se detecta aunque el archivo no exista.
+func TestAbsSymlinkIntermedio(t *testing.T) {
+	fuera := t.TempDir()
+	root := t.TempDir()
+	for _, d := range []string{".git", "ok"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(fuera, filepath.Join(root, "fuga")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(".git", filepath.Join(root, "d")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(fuera, "no-existe.md"), filepath.Join(root, "colgante.md")); err != nil {
+		t.Fatal(err)
+	}
+	v, err := Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"fuga/x.md", "fuga/sub/y.md", "d/x.md", "d/sub/y.md", "colgante.md"} {
+		if _, err := v.Abs(rel); !errors.Is(err, ErrOutside) {
+			t.Errorf("Abs(%q) err = %v, want ErrOutside", rel, err)
+		}
+	}
+	got, err := v.Abs("ok/nuevo.md")
+	if err != nil || got != filepath.Join(v.Root, "ok", "nuevo.md") {
+		t.Errorf("Abs(ok/nuevo.md) = %q, %v", got, err)
+	}
+}
+
+func TestIgnoredSinMayusculas(t *testing.T) {
+	for _, n := range []string{"_templates", "_TEMPLATES", "_Templates", "node_modules", "Node_Modules", ".git"} {
+		if !ignored(n) {
+			t.Errorf("%q debería ignorarse", n)
+		}
+	}
+	if ignored("templates") {
+		t.Error("templates no debería ignorarse")
+	}
+}

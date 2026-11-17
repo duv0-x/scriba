@@ -152,7 +152,8 @@ func Head(dir string) (string, error) {
 func hasUpstream(ctx context.Context, dir string) (bool, error) {
 	_, err := run(ctx, dir, Cred{}, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
 	if err != nil {
-		if strings.Contains(err.Error(), "no upstream") {
+		// "unknown revision": upstream configurado pero aún sin rama remota (clon de un repo vacío).
+		if strings.Contains(err.Error(), "no upstream") || strings.Contains(err.Error(), "unknown revision") {
 			return false, nil
 		}
 		return false, err
@@ -168,7 +169,24 @@ func Pull(ctx context.Context, dir string, cred Cred) error {
 	}
 	_, err = run(ctx, dir, cred, "-c", "user.name=Scriba", "-c", "user.email=scriba@localhost",
 		"-c", "commit.gpgsign=false", "pull", "--rebase", "-q")
+	if err != nil && rebasing(dir) {
+		// Un rebase a medias deja el vault en detached HEAD con marcas de conflicto: se deshace.
+		if _, aerr := run(context.Background(), dir, Cred{}, "rebase", "--abort"); aerr != nil {
+			return fmt.Errorf("conflicto con origin: falló el rebase --abort (%v): %w", aerr, err)
+		}
+		return fmt.Errorf("conflicto con origin: se abortó el rebase: %w", err)
+	}
 	return err
+}
+
+// rebasing indica si hay un rebase en curso en dir.
+func rebasing(dir string) bool {
+	for _, d := range []string{"rebase-merge", "rebase-apply"} {
+		if _, err := os.Stat(filepath.Join(dir, ".git", d)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Push empuja la rama actual a origin y fija el upstream.

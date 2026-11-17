@@ -45,12 +45,25 @@ func (v *Vault) Abs(rel string) (string, error) {
 	}
 	abs := filepath.Join(v.Root, clean)
 	// Un symlink dentro del vault puede apuntar afuera: se compara la ruta resuelta.
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return abs, nil
+	// Si el archivo aún no existe se valida el prefijo existente más largo, porque un
+	// directorio intermedio puede ser un symlink (fuga -> /tmp/fuera); el resto no existe
+	// y por tanto no puede ser symlink.
+	resolved := abs
+	for {
+		r, err := filepath.EvalSymlinks(resolved)
+		if err == nil {
+			resolved = r
+			break
 		}
-		return "", fmt.Errorf("vault: %w", err)
+		if _, lerr := os.Lstat(resolved); lerr == nil {
+			// Existe pero no resuelve: symlink colgante, escribir en él saldría a su destino.
+			return "", ErrOutside
+		}
+		parent := filepath.Dir(resolved)
+		if !errors.Is(err, fs.ErrNotExist) || parent == resolved {
+			return "", fmt.Errorf("vault: %w", err)
+		}
+		resolved = parent
 	}
 	root, err := filepath.EvalSymlinks(v.Root)
 	if err != nil {
@@ -69,7 +82,8 @@ func (v *Vault) Abs(rel string) (string, error) {
 
 // ignored dice si un segmento de ruta queda fuera del vault: ocultos, _templates y node_modules.
 func ignored(name string) bool {
-	return strings.HasPrefix(name, ".") || name == "_templates" || name == "node_modules"
+	// Sin distinguir mayúsculas: en macOS/Windows _TEMPLATES es el mismo directorio.
+	return strings.HasPrefix(name, ".") || strings.EqualFold(name, "_templates") || strings.EqualFold(name, "node_modules")
 }
 
 // Walk llama fn con cada archivo *.md (ruta relativa con '/'), en orden léxico,

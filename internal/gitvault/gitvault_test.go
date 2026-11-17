@@ -192,7 +192,7 @@ func TestPusherDebounce(t *testing.T) {
 	dir := clone(t, bare, Cred{})
 	var calls atomic.Int32
 	results := make(chan error, 10)
-	p := NewPusher(dir, func() Cred { calls.Add(1); return Cred{} }, 100*time.Millisecond,
+	p := NewPusher(dir, func() (Cred, bool) { calls.Add(1); return Cred{}, true }, 100*time.Millisecond,
 		func(hash string, err error) { results <- err })
 	hash := commit(t, dir, "p.md", "p\n")
 	p.Trigger()
@@ -336,4 +336,48 @@ func TestConfigGlobalIgnorada(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertNoExiste(t, marker, filepath.Join(home, ".git-credentials"))
+}
+
+func TestPullConflictoAbortaRebase(t *testing.T) {
+	ctx := context.Background()
+	bare := setup(t)
+	a := clone(t, bare, Cred{})
+	b := clone(t, bare, Cred{})
+	commit(t, b, "README.md", "remoto\n")
+	if err := Push(ctx, b, Cred{}); err != nil {
+		t.Fatal(err)
+	}
+	local := commit(t, a, "README.md", "local\n")
+
+	err := Pull(ctx, a, Cred{})
+	if err == nil || !strings.Contains(err.Error(), "conflicto con origin: se abortó el rebase") {
+		t.Fatalf("Pull: %v", err)
+	}
+	if rebasing(a) {
+		t.Fatal("quedó un rebase en curso")
+	}
+	if br := git(t, a, "branch", "--show-current"); br != "main" {
+		t.Fatalf("rama tras abortar: %q", br)
+	}
+	if h, _ := Head(a); h != local {
+		t.Fatalf("HEAD=%s, esperado el commit local %s", h, local)
+	}
+}
+
+func TestPusherApagadoNoHaceNada(t *testing.T) {
+	bare := setup(t)
+	dir := clone(t, bare, Cred{})
+	var calls, results atomic.Int32
+	p := NewPusher(dir, func() (Cred, bool) { calls.Add(1); return Cred{}, false }, 10*time.Millisecond,
+		func(string, error) { results.Add(1) })
+	commit(t, dir, "p.md", "p\n")
+	p.Trigger()
+	time.Sleep(200 * time.Millisecond)
+	p.Close()
+	if calls.Load() != 1 || results.Load() != 0 {
+		t.Fatalf("calls=%d results=%d", calls.Load(), results.Load())
+	}
+	if ah, _, err := Status(context.Background(), dir); err != nil || ah != 1 {
+		t.Fatalf("no debería haber empujado: ahead=%d err=%v", ah, err)
+	}
 }
