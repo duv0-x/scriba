@@ -1,0 +1,96 @@
+package web
+
+import "strconv"
+
+// layout es el shell de la app: sidebar, barra superior con búsqueda y la vista.
+templ layout(sh shell, title string, content templ.Component) {
+	<!DOCTYPE html>
+	<html lang="es">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/>
+			<link rel="stylesheet" href="/static/app.css"/>
+			<script src="/static/htmx.min.js" defer></script>
+		</head>
+		<body>
+			<div class="app">
+				@sidebar(sh)
+				<div class="main">
+					<header class="top">
+						<form class="search" action="/buscar" role="search">
+							<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+							<input
+								id="q"
+								type="search"
+								name="q"
+								placeholder="Buscar en la base de conocimiento"
+								aria-label="Buscar"
+								autocomplete="off"
+								hx-get="/buscar"
+								hx-trigger="input changed delay:150ms, search"
+								hx-target="#resultados"
+							/>
+							<kbd>⌘K</kbd>
+							<div class="results" id="resultados" aria-live="polite"></div>
+						</form>
+					</header>
+					<main class="view">
+						@content
+					</main>
+				</div>
+			</div>
+			<script>
+				// ⌘K / Ctrl+K enfoca la búsqueda; Escape o un clic fuera cierran los resultados.
+				(() => {
+					const q = document.getElementById("q"), res = document.getElementById("resultados");
+					document.addEventListener("keydown", (e) => {
+						if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); q.focus(); q.select(); }
+						else if (e.key === "Escape" && res.innerHTML) { res.innerHTML = ""; q.focus(); }
+					});
+					document.addEventListener("click", (e) => { if (!e.target.closest(".search")) res.innerHTML = ""; });
+				})();
+			</script>
+		</body>
+	</html>
+}
+
+templ sidebar(sh shell) {
+	<aside class="side" aria-label="Navegación">
+		<a class="brand" href="/">
+			@templ.Raw(logoSVG)
+			Scriba
+		</a>
+		<div>
+			<h2 class="eyebrow">Vistas</h2>
+			<nav class="nav">
+				<a href="/" class={ templ.KV("on", sh.Current == "") }>Actividad</a>
+			</nav>
+		</div>
+		<div>
+			<h2 class="eyebrow">Folios</h2>
+			<nav class="tree" aria-label="Folios">
+				@treeList(sh.Tree)
+			</nav>
+		</div>
+	</aside>
+}
+
+// treeList pinta el árbol con <details>, sin JS; la ruta de la nota abierta llega con open.
+templ treeList(nodes []treeNode) {
+	for _, n := range nodes {
+		if n.Dir {
+			<details open?={ n.Open }>
+				<summary title={ n.Path }><span class="lbl">{ n.Label }</span><span class="n">{ strconv.Itoa(n.N) }</span></summary>
+				<div class="kids">
+					@treeList(n.Children)
+				</div>
+			</details>
+		} else if n.Current {
+			<a href={ noteHref(n.Path) } aria-current="page" title={ n.Path }>{ n.Label }</a>
+		} else {
+			<a href={ noteHref(n.Path) } title={ n.Path }>{ n.Label }</a>
+		}
+	}
+}

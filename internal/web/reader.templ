@@ -1,0 +1,89 @@
+package web
+
+import (
+	"html/template"
+	"strconv"
+
+	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/render"
+	"github.com/duv0-x/scriba/internal/vault"
+)
+
+templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, back []index.NoteRef) {
+	<div class="reader">
+		<article>
+			<div class="crumbs">{ n.Path }</div>
+			<h1 class="doc-title">{ n.Title }</h1>
+			<div class="meta">
+				<span class="chip">{ typeLabel(n.Type) }</span>
+				for _, t := range n.Tags {
+					<span class="chip plain">#{ t }</span>
+				}
+			</div>
+			<div class="prose">
+				@templ.Raw(string(body))
+			</div>
+		</article>
+		<aside class="aside" aria-label="Contexto de la nota">
+			if len(headings) > 0 {
+				<section>
+					<h2 class="eyebrow">En esta nota</h2>
+					<ul>
+						for _, h := range headings {
+							<li><a class="toc" href={ templ.SafeURL("#" + h.ID) } data-id={ h.ID }>{ h.Text }</a></li>
+						}
+					</ul>
+				</section>
+				<script>
+					// Marca en "En esta nota" la sección que se está leyendo.
+					(() => {
+						const links = new Map([...document.querySelectorAll(".aside a.toc")].map(a => [a.dataset.id, a]));
+						const root = document.querySelector(".view");
+						const io = new IntersectionObserver(es => es.forEach(e => {
+							if (!e.isIntersecting) return;
+							links.forEach(a => a.classList.remove("on"));
+							links.get(e.target.id)?.classList.add("on");
+						}), { root, rootMargin: "0px 0px -70% 0px" });
+						document.querySelectorAll(".prose h2[id]").forEach(h => links.has(h.id) && io.observe(h));
+					})();
+				</script>
+			}
+			<section>
+				<h2 class="eyebrow">Enlazada desde · { strconv.Itoa(len(back)) }</h2>
+				if len(back) == 0 {
+					<p class="none">Ninguna nota apunta aquí todavía</p>
+				} else {
+					<ul>
+						for _, b := range back {
+							<li><a href={ noteHref(b.Path) } title={ b.Path }>{ b.Title }<small>{ dirOf(b.Path) }</small></a></li>
+						}
+					</ul>
+				}
+			</section>
+			<section>
+				<h2 class="eyebrow">Propiedades</h2>
+				<dl class="props">
+					if n.Date != "" {
+						<dt>Fecha</dt>
+						<dd>{ n.Date }</dd>
+					}
+					<dt>Palabras</dt>
+					<dd>{ strconv.Itoa(n.Words) }</dd>
+					<dt>Lectura</dt>
+					<dd>{ strconv.Itoa(readingMinutes(n.Words)) } min</dd>
+				</dl>
+			</section>
+		</aside>
+	</div>
+}
+
+templ notFoundPage(p string) {
+	<div class="dash">
+		<div>
+			<div class="crumbs">{ p }</div>
+			<h1>Esta nota no existe</h1>
+			<p class="sub">Puede que se haya movido o que aún no se haya escrito.</p>
+		</div>
+		<p><a href="/">Volver a la actividad</a></p>
+	</div>
+}

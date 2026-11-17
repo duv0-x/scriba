@@ -1,0 +1,31 @@
+package web
+
+import "github.com/duv0-x/scriba/internal/index"
+
+// homePage es el marcador del dashboard (PR3): solo las notas recientes.
+templ homePage(recent []index.NoteRef) {
+	<div class="dash">
+		<div>
+			<h1>Actividad de la base de conocimiento</h1>
+			<p class="sub">Lo que tus agentes han documentado</p>
+		</div>
+		<section class="card">
+			<h2>Notas recientes</h2>
+			if len(recent) == 0 {
+				<p class="empty">Todavía no hay notas.</p>
+			} else {
+				<ul class="feed">
+					for _, n := range recent {
+						<li>
+							<a href={ noteHref(n.Path) }>{ n.Title }</a>
+							<code>{ n.Path }</code>
+							if n.Date != "" {
+								<time datetime={ n.Date }>{ n.Date }</time>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</section>
+	</div>
+}

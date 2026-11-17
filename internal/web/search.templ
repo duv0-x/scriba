@@ -1,0 +1,37 @@
+package web
+
+import "github.com/duv0-x/scriba/internal/index"
+
+// searchResults es el parcial que htmx inserta en #resultados; vacío si no hay consulta.
+templ searchResults(q string, hits []index.Hit) {
+	if q != "" {
+		if len(hits) == 0 {
+			<p class="empty">Sin resultados para “{ q }”.</p>
+		} else {
+			<div class="hits">
+				for _, h := range hits {
+					<a href={ noteHref(h.Path) }>
+						<b>{ h.Title }</b>
+						<code>{ h.Path }</code>
+						<small>
+							@templ.Raw(h.Snippet)
+						</small>
+					</a>
+				}
+			</div>
+		}
+	}
+}
+
+templ searchPage(q string, hits []index.Hit) {
+	<div class="dash">
+		<h1>Buscar</h1>
+		<section class="card">
+			if q == "" {
+				<p class="empty">Escribe algo en la búsqueda.</p>
+			} else {
+				@searchResults(q, hits)
+			}
+		</section>
+	</div>
+}
