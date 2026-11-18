@@ -1,0 +1,117 @@
+package web
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+)
+
+// dashboardPage es la portada: tiles, heatmap, actividad reciente y almacenamiento.
+templ dashboardPage(d dashData) {
+	<div class="dash">
+		<div>
+			<h1>Actividad de la base de conocimiento</h1>
+			<p class="sub">Lo que tus agentes han documentado</p>
+		</div>
+		if d.Aviso != "" {
+			<p class="alert" role="status">{ d.Aviso }</p>
+		}
+		<section class="tiles">
+			for _, t := range d.Tiles {
+				<div class="tile">
+					<div class="tile-k">{ t.Label }</div>
+					<div class="tile-v">
+						{ t.Value }
+						if t.Unit != "" {
+							<small>{ t.Unit }</small>
+						}
+						if t.Pill {
+							<span class="tile-pill">{ t.Hint }</span>
+						}
+					</div>
+					if !t.Pill && t.Hint != "" {
+						<div class="tile-h">{ t.Hint }</div>
+					}
+				</div>
+			}
+		</section>
+		<section class="card">
+			<div class="card-head">
+				<div>
+					<h2>Notas por día</h2>
+					<p class="card-sub">{ d.Total } en el último año</p>
+				</div>
+				<div class="heat-legend" aria-hidden="true">
+					Menos
+					for l := range 5 {
+						<i data-l={ strconv.Itoa(l) }></i>
+					}
+					Más
+				</div>
+			</div>
+			<div class="heat-wrap">
+				<div class="heat">
+					for _, c := range d.Heat {
+						if c.Future {
+							<i class="fut"></i>
+						} else {
+							<i data-l={ strconv.Itoa(c.Level) } title={ c.Title }></i>
+						}
+					}
+				</div>
+				<div class="heat-months" aria-hidden="true">
+					for _, m := range d.Months {
+						<span>{ m }</span>
+					}
+				</div>
+			</div>
+		</section>
+		<div class="grid2">
+			<section class="card">
+				<h2>Actividad reciente</h2>
+				if len(d.Feed) == 0 {
+					<p class="empty">Todavía no hay commits en la base.</p>
+				} else {
+					<ul class="activity">
+						for _, it := range d.Feed {
+							<li>
+								<div class="activity-meta">
+									<span class={ "who", templ.KV("agent", it.Agent) }>{ it.Who }</span>
+									<span class="verb">{ it.Verb }</span>
+									<time datetime={ it.At.Format(time.RFC3339) }>{ it.Ago }</time>
+								</div>
+								if it.Href != "" {
+									<a href={ templ.SafeURL(it.Href) }>{ it.Title }</a>
+								} else if it.Title != "" {
+									<code>{ it.Title }</code>
+								}
+							</li>
+						}
+					</ul>
+				}
+			</section>
+			<section class="card">
+				<h2>Almacenamiento</h2>
+				if len(d.Storage) == 0 {
+					<p class="empty">La base está vacía.</p>
+				} else {
+					<div class="bar">
+						for _, sg := range d.Storage {
+							<span data-s={ sg.Key } style={ fmt.Sprintf("width:%.2f%%", sg.Pct) }></span>
+						}
+					</div>
+					<ul class="legend">
+						for _, sg := range d.Storage {
+							<li><i data-s={ sg.Key }></i><span>{ sg.Name }</span><b>{ sg.Size }</b></li>
+						}
+					</ul>
+				}
+				if d.Links != "" {
+					<dl class="idx">
+						<div><dt>Wikilinks resueltos</dt><dd>{ d.Links }</dd></div>
+					</dl>
+				}
+			</section>
+		</div>
+	</div>
+}

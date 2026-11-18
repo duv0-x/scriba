@@ -65,7 +65,7 @@ func TestRoutes(t *testing.T) {
 		{name: "sin resultados", target: "/buscar?q=zzzz", hdr: map[string]string{"HX-Request": "true"}, status: 200,
 			has: []string{"Sin resultados para “zzzz”."}},
 		{name: "readyz", target: "/readyz", status: 200, has: []string{"ok"}},
-		{name: "inicio", target: "/", status: 200, has: []string{"Notas recientes", "Actividad de la base de conocimiento"}},
+		{name: "inicio", target: "/", status: 200, has: []string{"Notas por día", "Actividad de la base de conocimiento"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

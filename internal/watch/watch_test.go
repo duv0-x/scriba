@@ -61,9 +61,18 @@ func TestRun(t *testing.T) {
 	}
 
 	var mu sync.Mutex
-	var changed []string
-	onChange := func(p string) { mu.Lock(); changed = append(changed, p); mu.Unlock() }
+	var changed, deleted []string
+	onChange := func(p string, del bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		if del {
+			deleted = append(deleted, p)
+		} else {
+			changed = append(changed, p)
+		}
+	}
 	saw := func(p string) bool { mu.Lock(); defer mu.Unlock(); return slices.Contains(changed, p) }
+	sawDeleted := func(p string) bool { mu.Lock(); defer mu.Unlock(); return slices.Contains(deleted, p) }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -84,7 +93,7 @@ func TestRun(t *testing.T) {
 	if err := os.Remove(a); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "borrar a.md", func() bool { return !found(t, ix, "tierra", "a.md") })
+	eventually(t, "borrar a.md", func() bool { return !found(t, ix, "tierra", "a.md") && sawDeleted("a.md") })
 
 	write(t, filepath.Join(root, ".oculto", "c.md"), "secreto")
 	write(t, filepath.Join(root, "x.txt"), "texto plano")
@@ -96,7 +105,7 @@ func TestRun(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(root, "sub")); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "borrar sub/", func() bool { return !found(t, ix, "pinguino", "sub/b.md") })
+	eventually(t, "borrar sub/", func() bool { return !found(t, ix, "pinguino", "sub/b.md") && sawDeleted("sub/b.md") })
 
 	write(t, filepath.Join(root, "docs1", "n.md"), "kiwi")
 	eventually(t, "crear docs1/n.md", func() bool { return found(t, ix, "kiwi", "docs1/n.md") })

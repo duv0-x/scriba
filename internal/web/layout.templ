@@ -13,6 +13,7 @@ templ layout(sh shell, title string, content templ.Component) {
 			<link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/>
 			<link rel="stylesheet" href="/static/app.css"/>
 			<script src="/static/htmx.min.js" defer></script>
+			<script src="/static/live.js" defer></script>
 		</head>
 		<body>
 			<div class="app">
@@ -35,6 +36,7 @@ templ layout(sh shell, title string, content templ.Component) {
 							<kbd>⌘K</kbd>
 							<div class="results" id="resultados" aria-live="polite"></div>
 						</form>
+						<a class="live-badge" id="live" hidden></a>
 					</header>
 					<main class="view">
 						@content
@@ -91,10 +93,18 @@ templ treeList(nodes []treeNode) {
 					@treeList(n.Children)
 				</div>
 			</details>
-		} else if n.Current {
-			<a href={ noteHref(n.Path) } aria-current="page" title={ n.Path }>{ n.Label }</a>
 		} else {
-			<a href={ noteHref(n.Path) } title={ n.Path }>{ n.Label }</a>
+			<a
+				href={ noteHref(n.Path) }
+				data-path={ n.Path }
+				if n.Unread || n.Writing {
+					class={ templ.KV("unread", n.Unread), templ.KV("writing", n.Writing) }
+				}
+				if n.Current {
+					aria-current="page"
+				}
+				title={ n.Path }
+			>{ n.Label }</a>
 		}
 	}
 }

@@ -3,6 +3,8 @@
 package writer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -89,6 +91,32 @@ func (w *Writer) Write(agent, path, content, message string) (Result, error) {
 	return w.save(agent, path, abs, content, message, action, created, time.Now())
 }
 
+// ErrConflict indica que la nota cambió desde que se leyó (bloqueo optimista del editor web).
+var ErrConflict = errors.New("writer: la nota cambió desde que se abrió")
+
+// WriteIfUnchanged reemplaza path solo si su contenido actual tiene el SHA-256 (hex) base.
+// La comparación ocurre bajo el mismo lock que las escrituras de los agentes, así un cambio
+// de un agente nunca se pisa.
+func (w *Writer) WriteIfUnchanged(agent, path, content, message, base string) (Result, error) {
+	if err := checkContent(content); err != nil {
+		return Result{}, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	abs, err := w.abs(path)
+	if err != nil {
+		return Result{}, err
+	}
+	cur, err := os.ReadFile(abs)
+	if err != nil {
+		return Result{}, err
+	}
+	if sum := sha256.Sum256(cur); hex.EncodeToString(sum[:]) != base {
+		return Result{}, ErrConflict
+	}
+	return w.save(agent, path, abs, content, message, "write", false, time.Now())
+}
+
 // Append añade content al final de path, separado por una línea en blanco; crea la nota si no existe.
 func (w *Writer) Append(agent, path, content string) (Result, error) {
 	if err := checkContent(content); err != nil {
@@ -138,7 +166,7 @@ func (w *Writer) LogJournal(agent, title, body string, now time.Time) (Result, e
 	return w.save(agent, p, abs, content, "", "journal", created, now)
 }
 
-// save escribe, reindexa, hace commit, dispara el push y registra la actividad. Requiere w.mu.
+// save escribe, reindexa, avisa del cambio, hace commit, dispara el push y registra la actividad. Requiere w.mu.
 // Una vez escrito el archivo, los fallos del índice y de la actividad solo se registran:
 // la nota ya está en disco (y en git) y el watcher la reindexa.
 func (w *Writer) save(agent, rel, abs, content, message, action string, created bool, now time.Time) (Result, error) {
@@ -154,6 +182,11 @@ func (w *Writer) save(agent, rel, abs, content, message, action string, created 
 		slog.Warn("writer: leer para reindexar", "path", rel, "err", err)
 	} else if err := w.cfg.Ix.Upsert(n); err != nil {
 		slog.Warn("writer: reindexar", "path", rel, "err", err)
+	}
+	// Se avisa antes del commit: el archivo ya cambió aunque el commit falle, y en la Pi el
+	// commit puede tardar más que el debounce del watcher.
+	if w.cfg.OnChange != nil {
+		w.cfg.OnChange(rel, agent)
 	}
 	if gitvault.IsRepo(w.cfg.V.Root) {
 		if message == "" {
@@ -178,9 +211,6 @@ func (w *Writer) save(agent, rel, abs, content, message, action string, created 
 		if err := w.cfg.Act.AddActivity(now, agent, action, rel); err != nil {
 			slog.Warn("writer: registrar actividad", "path", rel, "agent", agent, "err", err)
 		}
-	}
-	if w.cfg.OnChange != nil {
-		w.cfg.OnChange(rel, agent)
 	}
 	return res, nil
 }

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGating(t *testing.T) {
@@ -102,5 +103,32 @@ func TestZipInseguro(t *testing.T) {
 	}
 	if len(e.git.calls) != 0 || e.imported != 0 {
 		t.Errorf("git = %v, OnImported = %d", e.git.calls, e.imported)
+	}
+}
+
+// Tras importar, nada de lo importado sale "sin leer": ni la visita con el vault vacío ni un
+// baseline previo cuentan.
+func TestImportarNoMarcaSinLeer(t *testing.T) {
+	e := newSetupServer(t)
+	e.srv.OnImported = func() {
+		if err := e.srv.Ix.Rebuild(e.srv.V); err != nil {
+			t.Error(err)
+		}
+	}
+	if res, _ := get(t, e.h, "/bienvenida", nil); res.StatusCode != http.StatusOK {
+		t.Fatalf("bienvenida = %d", res.StatusCode)
+	}
+	if _, err := e.srv.State.Baseline("default", time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if res, body := post(t, e.h, "/bienvenida/nueva", nil, nil); res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("nueva = %d\n%s", res.StatusCode, body)
+	}
+	_, body := get(t, e.h, "/", nil)
+	if !strings.Contains(body, `data-path="`) {
+		t.Fatalf("la sidebar no lista notas\n%s", body)
+	}
+	if strings.Contains(body, `class="unread`) {
+		t.Error("hay notas marcadas como sin leer tras importar")
 	}
 }

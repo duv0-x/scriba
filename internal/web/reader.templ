@@ -9,17 +9,25 @@ import (
 	"github.com/duv0-x/scriba/internal/vault"
 )
 
-templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, back []index.NoteRef) {
-	<div class="reader">
+templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, back []index.NoteRef, banner string, editable bool) {
+	<div class="reader" data-note={ n.Path }>
 		<article>
 			<div class="crumbs">{ n.Path }</div>
-			<h1 class="doc-title">{ n.Title }</h1>
+			<div class="title-row">
+				<h1 class="doc-title">{ n.Title }</h1>
+				if editable {
+					<a class="btn" href={ editHref(n.Path) }>Editar</a>
+				}
+			</div>
 			<div class="meta">
 				<span class="chip">{ typeLabel(n.Type) }</span>
 				for _, t := range n.Tags {
 					<span class="chip plain">#{ t }</span>
 				}
 			</div>
+			if banner != "" {
+				<div class="changes" role="status">{ banner }</div>
+			}
 			<div class="prose">
 				@templ.Raw(string(body))
 			</div>

@@ -1,0 +1,45 @@
+package web
+
+// editorPage es el editor web: barra fina con la ruta y las acciones, y debajo el split
+// Markdown / vista previa.
+templ editorPage(v editorView) {
+	<form class="editor" id="editor" method="post" action={ editHref(v.Path) } data-path={ v.Path } data-dirty?={ v.Dirty }>
+		<div class="editbar">
+			<span class="editing">Editando <code>{ v.Path }</code></span>
+			if v.Agent != "" {
+				<span class="edit-note" role="status">{ v.Agent } escribió en esta nota hace un momento; si guardas, se conserva el cambio más reciente</span>
+			}
+			<input class="edit-msg" type="text" name="message" value={ v.Message } placeholder="Mensaje del commit (opcional)" aria-label="Mensaje del commit" maxlength="200"/>
+			<a class="btn" href={ noteHref(v.Path) }>Cancelar</a>
+			<button class="btn primary" type="submit" title="Guardar (Ctrl/⌘+S)">Guardar</button>
+		</div>
+		if v.Alert != "" {
+			<div class="edit-alert">
+				<p class="alert" role="alert">{ v.Alert }</p>
+				if v.Current != "" {
+					<details class="edit-current">
+						<summary>Ver el contenido actual de la nota</summary>
+						<pre>{ v.Current }</pre>
+					</details>
+				}
+				if v.Force != "" {
+					<button class="btn" type="submit" name="force" value={ v.Force }>Guardar de todos modos</button>
+				}
+			</div>
+		}
+		<input type="hidden" name="base" value={ v.Base }/>
+		<div class="split">
+			<section class="pane" aria-label="Fuente Markdown">
+				<h2 class="eyebrow">Fuente Markdown</h2>
+				<textarea name="content" spellcheck="false" aria-label="Markdown de la nota">{ "\n" + v.Content }</textarea>
+			</section>
+			<section class="pane" aria-label="Vista previa">
+				<h2 class="eyebrow">Vista previa</h2>
+				<div class="prose" id="preview" aria-live="polite">
+					@templ.Raw(string(v.Preview))
+				</div>
+			</section>
+		</div>
+	</form>
+	<script src="/static/editor.js" defer></script>
+}

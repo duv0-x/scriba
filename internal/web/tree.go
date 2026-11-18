@@ -20,6 +20,8 @@ type treeNode struct {
 	N        int    // notas dentro de la carpeta, recursivo
 	Open     bool   // la nota actual está dentro
 	Current  bool
+	Unread   bool // cambió desde la última lectura del usuario (PR3b)
+	Writing  bool // un agente la está escribiendo (PR3b)
 	Children []treeNode
 }
 

@@ -157,9 +157,13 @@ func (s *Server) initialized() (bool, error) {
 	return n > 0, err
 }
 
-// markImported cierra la creación/importación: marca la base y avisa para reindexar.
+// markImported cierra la creación/importación: marca la base, reinicia los baselines de "sin
+// leer" (las notas importadas no son novedades) y avisa para reindexar.
 func (s *Server) markImported() error {
 	if err := s.State.SetSetting(settingInitialized, "1"); err != nil {
+		return err
+	}
+	if err := s.State.ClearBaselines(); err != nil {
 		return err
 	}
 	if s.OnImported != nil {
@@ -199,7 +203,7 @@ func (s *Server) welcome(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderWelcome(w http.ResponseWriter, r *http.Request, status int, msg string) {
-	sh, err := s.shell("")
+	sh, err := s.shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
 		return
@@ -321,7 +325,7 @@ func (s *Server) renderConnectors(w http.ResponseWriter, r *http.Request, status
 		}
 		s.mu.Unlock()
 	}
-	sh, err := s.shell("")
+	sh, err := s.shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
 		return

@@ -12,6 +12,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -19,10 +20,11 @@ import (
 	"github.com/a-h/templ"
 
 	"github.com/duv0-x/scriba/internal/agents"
+	"github.com/duv0-x/scriba/internal/events"
 	"github.com/duv0-x/scriba/internal/index"
-	"github.com/duv0-x/scriba/internal/render"
 	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
+	"github.com/duv0-x/scriba/internal/writer"
 )
 
 //go:embed static
@@ -41,6 +43,10 @@ type Server struct {
 	OnImported func()        // tras crear/importar el vault (reindexar); puede ser nil
 	Agents     *agents.Store // nil = sin pantalla de agentes
 	PublicURL  string        // base para el comando de Claude Code; "" = host de la petición
+	// PR3b: pueden ser nil (sin tiempo real, sin editor).
+	Bus      *events.Bus      // cambios de notas (agentes y disco)
+	Presence *events.Presence // qué agente está escribiendo qué nota
+	W        *writer.Writer   // escrituras desde el editor web
 
 	mu  sync.Mutex
 	dev *pendingDevice // device flow de GitHub en curso
@@ -58,7 +64,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		files.ServeHTTP(w, r)
 	})
-	mux.HandleFunc("GET /{$}", s.home)
+	mux.HandleFunc("GET /{$}", s.dashboard)
 	mux.HandleFunc("GET /n/{path...}", s.note)
 	mux.HandleFunc("GET /buscar", s.search)
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
@@ -68,6 +74,8 @@ func (s *Server) Handler() http.Handler {
 		}
 		_, _ = w.Write([]byte("ok"))
 	})
+	s.liveRoutes(mux)
+	s.editorRoutes(mux)
 	if s.State == nil {
 		return mux
 	}
@@ -78,33 +86,21 @@ func (s *Server) Handler() http.Handler {
 	return sameOrigin(s.gate(mux))
 }
 
-func (s *Server) home(w http.ResponseWriter, r *http.Request) {
-	sh, err := s.shell("")
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	recent, err := s.Ix.Recent(20)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	aviso := ""
-	if r.URL.Query().Get("aviso") == "historial" {
-		aviso = avisoHistorial
-	}
-	page(w, r, http.StatusOK, layout(sh, "Scriba", homePage(recent, aviso)))
-}
-
 func (s *Server) note(w http.ResponseWriter, r *http.Request) {
 	p := r.PathValue("path")
+	// El contenido crudo se lee antes que la nota: si cambia entre ambas lecturas, se marca leída
+	// la versión anterior y la nota vuelve a salir sin leer (nunca al revés).
+	var raw []byte
+	if abs, err := s.V.Abs(p); err == nil {
+		raw, _ = os.ReadFile(abs)
+	}
 	n, err := s.readNote(p)
 	switch {
 	case errors.Is(err, vault.ErrOutside):
 		http.Error(w, "ruta fuera del vault", http.StatusBadRequest)
 		return
 	case errors.Is(err, fs.ErrNotExist):
-		sh, err := s.shell("")
+		sh, err := s.shellFor(r, "")
 		if err != nil {
 			serverError(w, err)
 			return
@@ -127,9 +123,16 @@ func (s *Server) note(w http.ResponseWriter, r *http.Request) {
 			res[l.Raw] = l.Dst
 		}
 	}
-	body, headings, err := render.HTML(dropLeadingH1(n), res)
+	body, headings, banner, err := s.readView(r, n, string(raw), res)
 	if err != nil {
 		serverError(w, err)
+		return
+	}
+	if r.URL.Query().Get("fragmento") == "1" {
+		// Solo la prosa, para la reproducción en vivo (live.js).
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write([]byte(body))
 		return
 	}
 	back, err := s.Ix.Backlinks(n.Path)
@@ -137,12 +140,12 @@ func (s *Server) note(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	sh, err := s.shell(n.Path)
+	sh, err := s.shellFor(r, n.Path)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	page(w, r, http.StatusOK, layout(sh, n.Title+" · Scriba", readerPage(n, body, headings, back)))
+	page(w, r, http.StatusOK, layout(sh, n.Title+" · Scriba", readerPage(n, body, headings, back, banner, s.W != nil)))
 }
 
 // readNote solo sirve .md fuera de directorios ocultos: el vault es un repo git y .git/config no es una nota.
@@ -172,7 +175,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		page(w, r, http.StatusOK, searchResults(q, hits))
 		return
 	}
-	sh, err := s.shell("")
+	sh, err := s.shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
 		return
@@ -186,6 +189,15 @@ type shell struct {
 	View    string // vista de la sidebar marcada fuera del lector ("conectores", "agentes", "bienvenida")
 	Agents  bool   // hay pantalla de agentes
 	Tree    []treeNode
+}
+
+// shellFor es shell con los puntos de "sin leer" y de agente escribiendo del usuario de la petición.
+func (s *Server) shellFor(r *http.Request, current string) (shell, error) {
+	sh, err := s.shell(current)
+	if err == nil {
+		s.markTree(r, sh.Tree)
+	}
+	return sh, err
 }
 
 func (s *Server) shell(current string) (shell, error) {
@@ -286,4 +298,12 @@ func dirOf(p string) string {
 		return d
 	}
 	return ""
+}
+
+// user identifica a la persona que lee: el correo que inyecta Cloudflare Access o "default" en local.
+func user(r *http.Request) string {
+	if u := strings.TrimSpace(r.Header.Get("Cf-Access-Authenticated-User-Email")); u != "" {
+		return u
+	}
+	return "default"
 }
