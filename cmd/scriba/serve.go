@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/duv0-x/scriba/internal/agents"
+	"github.com/duv0-x/scriba/internal/events"
 	"github.com/duv0-x/scriba/internal/github"
 	"github.com/duv0-x/scriba/internal/gitvault"
 	"github.com/duv0-x/scriba/internal/index"
@@ -114,8 +115,24 @@ func runServe(ctx context.Context, o serveOpts) error {
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 
+	// Tiempo real: la presencia se actualiza antes de avisar al navegador, así el evento
+	// "presence" que sigue a cada cambio ya incluye al agente.
+	bus := events.NewBus()
+	presence := events.NewPresence(60*time.Second, nil)
+	// El Publisher une el aviso del writer y el del watcher de una misma escritura.
+	pub := events.NewPublisher(bus, presence, 2*time.Second, nil)
+	defer pub.Close()
+	onDisk := func(path string, deleted bool) {
+		if deleted {
+			if err := st.ForgetPath(path); err != nil {
+				slog.Warn("olvidar lecturas de nota borrada", "path", path, "err", err)
+			}
+		}
+		pub.Disk(path, deleted)
+	}
+
 	watchDone := make(chan error, 1)
-	go func() { watchDone <- watch.Run(ctx, v, ix, nil) }()
+	go func() { watchDone <- watch.Run(ctx, v, ix, onDisk) }()
 
 	// Push a GitHub tras cada commit de un agente; el ciclo comprueba al ejecutarse si el
 	// conector sigue activo con push. gitMu evita que el commit del writer y el
@@ -125,7 +142,7 @@ func runServe(ctx context.Context, o serveOpts) error {
 		func(hash string, err error) { recordPush(st, hash, err) })
 	pusher.Lock = &gitMu
 	defer pusher.Close()
-	wr := writer.New(writer.Config{V: v, Ix: ix, Act: st, Loc: loc, GitMu: &gitMu, Push: pusher.Trigger})
+	wr := writer.New(writer.Config{V: v, Ix: ix, Act: st, Loc: loc, GitMu: &gitMu, Push: pusher.Trigger, OnChange: pub.Agent})
 	// Commits que quedaron sin empujar (p. ej. un apagado antes del ciclo): se empujan al arrancar.
 	if _, push := githubCred(st, key); push && gitvault.IsRepo(v.Root) {
 		if ahead, _, err := gitvault.Status(ctx, v.Root); err != nil {
@@ -140,6 +157,7 @@ func runServe(ctx context.Context, o serveOpts) error {
 	mux.Handle("/mcp", mcp.Handler(mcp.Config{V: v, Ix: ix, W: wr, Agents: ag, PublicURL: o.publicURL, Version: version}))
 	mux.Handle("/", (&web.Server{
 		V: v, Ix: ix, State: st, Key: key, Agents: ag, PublicURL: o.publicURL,
+		Bus: bus, Presence: presence, W: wr,
 		GitHub: github.New(), Git: web.GitVault{}, ClientID: clientID,
 		OnImported: func() {
 			if err := ix.Rebuild(v); err != nil {

@@ -38,6 +38,8 @@ Los agentes leen y escriben por MCP en `/mcp`. Cada agente usa su propio token:
    claude mcp add --transport http scriba https://<tu-instancia>/mcp --header "Authorization: Bearer scb_…"
    ```
 
+Mientras un agente escribe, la web lo muestra en vivo: el badge "<agente> editando <nota>", un punto en Folios y, si tienes la nota abierta, los bloques nuevos aparecen con efecto de escritura. Al abrir una nota ves resaltado lo que cambió desde tu última lectura (por persona: el correo de Cloudflare Access, o `default` en local). Las notas también se pueden editar desde la web; si un agente la cambió mientras editabas, Scriba no sobrescribe y te muestra el conflicto.
+
 Cada escritura queda como un commit con el agente como autor (`claude-code-mac via Scriba`). Si GitHub está conectado con push automático, los commits se empujan cada 30 s. Ver [ADR-007](docs/adr/ADR-007-mcp-y-tokens-de-agente.md).
 
 ## Diseño

@@ -19,8 +19,9 @@ import (
 
 const debounce = 300 * time.Millisecond
 
-// Run vigila el vault hasta que ctx se cancela. onChange puede ser nil.
-func Run(ctx context.Context, v *vault.Vault, ix *index.Index, onChange func(path string)) error {
+// Run vigila el vault hasta que ctx se cancela. onChange (puede ser nil) recibe la ruta
+// relativa y deleted=true si la nota se borró.
+func Run(ctx context.Context, v *vault.Vault, ix *index.Index, onChange func(path string, deleted bool)) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -112,7 +113,7 @@ func addTree(w *fsnotify.Watcher, root string, onNote func(string)) error {
 }
 
 // purgeDir quita del índice las notas bajo abs (el directorio ya no existe con ese nombre).
-func purgeDir(v *vault.Vault, ix *index.Index, abs string, onChange func(string)) {
+func purgeDir(v *vault.Vault, ix *index.Index, abs string, onChange func(string, bool)) {
 	r, err := filepath.Rel(v.Root, abs)
 	if err != nil {
 		slog.Warn("watch: ruta fuera del vault", "path", abs, "err", err)
@@ -132,19 +133,21 @@ func purgeDir(v *vault.Vault, ix *index.Index, abs string, onChange func(string)
 			slog.Warn("watch: no se pudo borrar del índice", "path", p, "err", err)
 		}
 		if onChange != nil {
-			onChange(p)
+			onChange(p, true)
 		}
 	}
 }
 
-func process(v *vault.Vault, ix *index.Index, abs string, onChange func(string)) {
+func process(v *vault.Vault, ix *index.Index, abs string, onChange func(string, bool)) {
 	r, err := filepath.Rel(v.Root, abs)
 	if err != nil {
 		slog.Warn("watch: ruta fuera del vault", "path", abs, "err", err)
 		return
 	}
 	rel := filepath.ToSlash(r)
-	if _, err := os.Stat(abs); errors.Is(err, fs.ErrNotExist) {
+	_, err = os.Stat(abs)
+	deleted := errors.Is(err, fs.ErrNotExist)
+	if deleted {
 		if err := ix.Delete(rel); err != nil {
 			slog.Warn("watch: no se pudo borrar del índice", "path", rel, "err", err)
 		}
@@ -158,6 +161,6 @@ func process(v *vault.Vault, ix *index.Index, abs string, onChange func(string))
 		slog.Warn("watch: no se pudo indexar", "path", rel, "err", err)
 	}
 	if onChange != nil {
-		onChange(rel)
+		onChange(rel, deleted)
 	}
 }

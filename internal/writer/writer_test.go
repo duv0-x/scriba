@@ -1,6 +1,8 @@
 package writer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -344,5 +346,31 @@ func TestPusherConcurrente(t *testing.T) {
 	defer mu.Unlock()
 	for _, err := range pushErrs {
 		t.Errorf("push: %v", err)
+	}
+}
+
+func TestWriteIfUnchanged(t *testing.T) {
+	e := setup(t, true)
+	w, root := e.w, e.root
+	if _, err := w.Write("claude", "notas/a.md", "uno", ""); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := os.ReadFile(filepath.Join(root, "notas/a.md"))
+	sum := sha256.Sum256(cur)
+	base := hex.EncodeToString(sum[:])
+	// Un agente escribe después de que el editor leyó la nota: el guardado del editor debe fallar.
+	if _, err := w.Write("claude", "notas/a.md", "dos", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.WriteIfUnchanged("web", "notas/a.md", "editado", "", base); !errors.Is(err, ErrConflict) {
+		t.Fatalf("esperaba ErrConflict, fue %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(root, "notas/a.md")); !strings.Contains(string(got), "dos") {
+		t.Fatalf("se pisó el cambio del agente: %q", got)
+	}
+	cur, _ = os.ReadFile(filepath.Join(root, "notas/a.md"))
+	sum = sha256.Sum256(cur)
+	if _, err := w.WriteIfUnchanged("web", "notas/a.md", "editado", "", hex.EncodeToString(sum[:])); err != nil {
+		t.Fatalf("con el hash vigente debía escribir: %v", err)
 	}
 }
