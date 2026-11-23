@@ -1,0 +1,9 @@
+[Unit]
+Description=Instala la última release de Scriba
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/scriba/scriba-update.env
+ExecStart=/usr/local/bin/scriba-update

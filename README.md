@@ -4,7 +4,7 @@ Scriba es una base de conocimiento en Markdown que escriben tus agentes de IA y 
 
 ## Estado
 
-En construcción: todavía no hay un release usable.
+Primera release: `v0.1.0`. El MVP está completo; ver [releases](https://github.com/duv0-x/scriba/releases).
 
 ## Cómo correrlo
 
@@ -14,16 +14,35 @@ go run ./cmd/scriba serve --vault <dir>
 
 Si `<dir>` no existe o está vacío, Scriba abre la bienvenida: crear una base nueva, importarla desde GitHub o subir un `.zip` (Obsidian o carpetas locales). Junto al vault guarda `scriba.db` (índice reconstruible), `state.db` (conectores) y `secret.key` (llave de cifrado, `0600`).
 
+## Instalar con systemd
+
+Cada release (`vX.Y.Z`) publica binarios para linux/amd64, linux/arm64 y darwin/arm64 con sus checksums. El `tar.gz` trae también `deploy/` y los avisos de licencia de las dependencias (`third_party_licenses/`). Scriba necesita `git` instalado.
+
+```bash
+sudo useradd --system --home /scriba --shell /usr/sbin/nologin scriba
+sudo install -d -m 0700 -o scriba -g scriba /scriba/data /scriba/data/tmp
+sudo install -m 0600 deploy/scriba.env.example /scriba/scriba.env   # edita la URL pública
+sudo install -m 0755 deploy/scriba-update /usr/local/bin/scriba-update
+sudo install -m 0644 deploy/scriba.service deploy/scriba-update.service deploy/scriba-update.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo /usr/local/bin/scriba-update                                   # instala el binario
+sudo systemctl enable --now scriba scriba-update.timer
+```
+
+`scriba-update` instala la última release cada 5 minutos, con verificación del checksum, respaldo del binario y de `state.db`, y rollback si `/readyz` no responde. Una versión que no queda lista se anota en `/scriba/.failed` y no se reintenta hasta que cambie la versión. Para fijar la versión estilo GitOps, define `SCRIBA_VERSION_URL` en `/scriba/scriba-update.env`, apuntando a un archivo con el tag (p. ej. el `scriba.version` del repo de tu instancia). Si cambias el puerto de `SCRIBA_LISTEN`, pon también `SCRIBA_READY_URL=http://127.0.0.1:<puerto>/readyz` en ese archivo: el updater espera `/readyz` en 8090. Ver [ADR-008](docs/adr/ADR-008-release-y-despliegue.md).
+
+Pon la web detrás de un proxy con autenticación (Scriba usa Cloudflare Access) y deja `/mcp` fuera de ella: los agentes se autentican con su token.
+
 ## Conectar GitHub
 
 Scriba se conecta a GitHub desde la pantalla **Conectores** con el device flow de OAuth: muestra un código, lo introduces en `github.com/login/device` y listo. Nunca se configuran credenciales en variables de entorno.
 
-Para tu propia instancia necesitas una OAuth App:
+El binario oficial ya trae el Client ID de la OAuth App "Scriba". Si prefieres que tu instancia use su propia app:
 
 1. En GitHub → *Settings* → *Developer settings* → *OAuth Apps* → *New OAuth App*.
 2. Nombre `Scriba`; *Homepage URL* y *Authorization callback URL*: la URL de tu instancia.
-3. Marca **Enable Device Flow** y guarda. No necesitas el client secret.
-4. Pasa el *Client ID* (es público) con `--github-client-id`, o compílalo como `github.DefaultClientID`.
+3. Marca **Enable Device Flow** y desmarca **Expire user access tokens** (Scriba aún no renueva tokens). No necesitas el client secret.
+4. Pasa su *Client ID* (es público) con `--github-client-id`.
 
 El token se guarda cifrado en la instancia (ver [ADR-006](docs/adr/ADR-006-conector-github-y-secretos.md)).
 

@@ -1,0 +1,103 @@
+#!/bin/bash
+# Instala la última release de Scriba si difiere de la instalada, con respaldo y rollback.
+# Lo corre scriba-update.timer como root. Variables opcionales (en /scriba/scriba-update.env):
+#   SCRIBA_VERSION_URL  URL de un archivo con el tag a instalar (p. ej. el scriba.version del repo de tu
+#                       instancia): fija la versión estilo GitOps. Sin ella, instala la última release.
+#   SCRIBA_REPO, SCRIBA_DIR, SCRIBA_READY_URL, SCRIBA_READY_TRIES, SCRIBA_USER.
+set -euo pipefail
+
+REPO=${SCRIBA_REPO:-duv0-x/scriba}
+DIR=${SCRIBA_DIR:-/scriba}
+READY_URL=${SCRIBA_READY_URL:-http://127.0.0.1:8090/readyz}
+READY_TRIES=${SCRIBA_READY_TRIES:-60}
+SVC_USER=${SCRIBA_USER:-scriba}
+PREV="$DIR/.previous"
+STATE="$DIR/data/state.db"
+INDEX="$DIR/data/scriba.db"
+
+case "$(uname -m)" in
+  aarch64|arm64) arch=arm64 ;;
+  x86_64|amd64) arch=amd64 ;;
+  *) echo "arquitectura no soportada: $(uname -m)" >&2; exit 1 ;;
+esac
+
+current=$(cat "$DIR/.release" 2>/dev/null || true)
+if [ -n "${SCRIBA_VERSION_URL:-}" ]; then
+  tag=$(curl -fsSL "$SCRIBA_VERSION_URL" | tr -d '[:space:]')
+else
+  tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+fi
+# El tag llega de afuera y termina en URLs y rutas: solo se aceptan versiones semánticas.
+if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "versión inválida: '$tag'" >&2
+  exit 1
+fi
+[ "$tag" = "$current" ] && exit 0
+# Una versión que ya hizo rollback no se reintenta cada 5 min: se espera a que scriba.version cambie.
+if [ "$tag" = "$(cat "$DIR/.failed" 2>/dev/null || true)" ]; then
+  echo "$tag ya falló antes; se omite hasta que cambie la versión" >&2
+  exit 0
+fi
+
+echo "actualizando ${current:-<ninguna>} -> $tag"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+file="scriba_${tag#v}_linux_${arch}.tar.gz"
+curl -fsSL -o "$tmp/$file" "https://github.com/$REPO/releases/download/$tag/$file"
+curl -fsSL -o "$tmp/checksums.txt" "https://github.com/$REPO/releases/download/$tag/checksums.txt"
+(cd "$tmp" && sha256sum -c --ignore-missing checksums.txt)
+mkdir "$tmp/new"
+tar -xzf "$tmp/$file" -C "$tmp/new"
+# Se comprueba antes de detener el servicio: con un archivo inesperado, la versión actual sigue en pie.
+if [ ! -s "$tmp/new/scriba" ]; then
+  echo "el archivo de $tag no trae el binario scriba" >&2
+  exit 1
+fi
+
+wait_ready() {
+  for _ in $(seq 1 "$READY_TRIES"); do
+    curl -sf -o /dev/null "$READY_URL" && return 0
+    sleep 2
+  done
+  return 1
+}
+
+systemctl stop scriba
+# Si algo falla a partir de aquí (disco lleno…), el servicio no queda detenido.
+trap 'systemctl start scriba' ERR
+# Con el servicio detenido, state.db queda consistente con el binario que se reemplaza; su -wal se copia
+# por si el proceso anterior murió sin volcarlo (SIGKILL, OOM). scriba.db no se respalda: es un índice
+# que se reconstruye desde el vault.
+rm -rf "$PREV"
+mkdir -p "$PREV"
+[ -f "$DIR/scriba" ] && cp -a "$DIR/scriba" "$PREV/"
+[ -f "$STATE" ] && cp -a "$STATE" "$PREV/"
+[ -f "$STATE-wal" ] && cp -a "$STATE-wal" "$PREV/"
+install -m 0755 -o root -g root "$tmp/new/scriba" "$DIR/scriba"
+systemctl start scriba
+
+if wait_ready; then
+  echo "$tag" > "$DIR/.release"
+  rm -f "$DIR/.failed"
+  echo "actualizado a $tag"
+  exit 0
+fi
+
+echo "$tag no quedó listo; haciendo rollback" >&2
+echo "$tag" > "$DIR/.failed"
+systemctl stop scriba
+if [ -f "$PREV/scriba" ]; then
+  install -m 0755 -o root -g root "$PREV/scriba" "$DIR/scriba"
+fi
+if [ -f "$PREV/state.db" ]; then
+  rm -f "$STATE-wal" "$STATE-shm"
+  install -m 0600 -o "$SVC_USER" -g "$SVC_USER" "$PREV/state.db" "$STATE"
+  if [ -f "$PREV/state.db-wal" ]; then
+    install -m 0600 -o "$SVC_USER" -g "$SVC_USER" "$PREV/state.db-wal" "$STATE-wal"
+  fi
+fi
+# El binario anterior reconstruye el índice desde el vault: una migración nueva del índice no bloquea el rollback.
+rm -f "$INDEX" "$INDEX-wal" "$INDEX-shm"
+systemctl start scriba
+exit 1
