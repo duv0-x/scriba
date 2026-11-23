@@ -49,7 +49,7 @@
   --scribe: #c46a3a;
   --code-bg: #eef1ef;
 }
-/* Tema oscuro: re-afinado, no invertido. El selector manual llega en el PR4. */
+/* Tema oscuro: re-afinado, no invertido. data-theme (theme.js) manda sobre el sistema: light anula el media query, dark lo fuerza. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -188,6 +188,19 @@
     background: var(--accent-soft);
     color: var(--accent);
     font-weight: 500;
+  }
+  .nav .vl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nav .vi {
+    flex: none;
+    color: var(--muted);
+  }
+  .nav > a.on .vi,
+  .nav > a:hover .vi {
+    color: var(--accent);
   }
   .nav .n {
     color: var(--muted);
@@ -1388,6 +1401,277 @@
     .tree a.writing::after,
     .caret {
       animation: none;
+    }
+  }
+
+  /* PR4 tema */
+  .theme-toggle {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin-left: auto;
+    flex: none;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .live-badge:not([hidden]) ~ .theme-toggle {
+    margin-left: 0;
+  }
+  .theme-toggle:hover {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .theme-toggle .ti {
+    display: none;
+  }
+  :root:not([data-modo]) .ti-sistema,
+  :root[data-modo="sistema"] .ti-sistema,
+  :root[data-modo="claro"] .ti-claro,
+  :root[data-modo="oscuro"] .ti-oscuro {
+    display: block;
+  }
+
+  /* PR4 grafo */
+  .gmap {
+    --g-journal: #7a8d98;
+    --g-tickets: #8b9298;
+    --g-decisions: var(--accent);
+    --g-runbooks: #4e9198;
+    --g-references: var(--muted);
+    --g-postmortems: #b0665f;
+    --g-otras: #aab1ad;
+    position: relative;
+  }
+  :root[data-theme="dark"] .gmap {
+    --g-journal: #6c7f8a;
+    --g-tickets: #6a7177;
+    --g-runbooks: #3f8b92;
+    --g-postmortems: #b45d56;
+    --g-otras: #555e66;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .gmap {
+      --g-journal: #6c7f8a;
+      --g-tickets: #6a7177;
+      --g-runbooks: #3f8b92;
+      --g-postmortems: #b45d56;
+      --g-otras: #555e66;
+    }
+  }
+  .gmap canvas {
+    display: block;
+    width: 100%;
+    touch-action: none;
+    cursor: grab;
+  }
+  .gmap.local canvas {
+    touch-action: pan-y; /* en móvil el rail sigue haciendo scroll aunque el dedo caiga en el grafo */
+  }
+  .gmap.full {
+    height: 100%;
+    min-height: 480px;
+    overflow: hidden;
+  }
+  .gmap.full canvas {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+  }
+  .gmap.local canvas {
+    height: 200px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  .ghead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ghead a {
+    color: var(--accent);
+    font-size: 12px;
+  }
+  .gfoot {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font: 12px var(--font-mono);
+  }
+  .gfilters,
+  .gtip,
+  .gcount,
+  .gzoom {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.12);
+  }
+  .gfilters {
+    top: 16px;
+    right: 16px;
+    width: 260px;
+    max-height: calc(100% - 96px);
+    overflow-y: auto;
+    padding: 16px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .gtypes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .gtypes label,
+  .gorph {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .gtypes span {
+    flex: 1;
+  }
+  .gfilters small {
+    color: var(--muted);
+    font: 12px var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .gfilters input[type="checkbox"],
+  .gfilters input[type="range"] {
+    accent-color: var(--accent);
+  }
+  .gorph {
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .gdot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--g-otras);
+  }
+  .gdot[data-k="journal"] {
+    background: var(--g-journal);
+  }
+  .gdot[data-k="tickets"] {
+    background: var(--g-tickets);
+  }
+  .gdot[data-k="decisions"] {
+    background: var(--g-decisions);
+  }
+  .gdot[data-k="runbooks"] {
+    background: var(--g-runbooks);
+  }
+  .gdot[data-k="references"] {
+    background: var(--g-references);
+  }
+  .gdot[data-k="postmortems"] {
+    background: var(--g-postmortems);
+  }
+  .gslider {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+    color: var(--muted);
+  }
+  .gslider output {
+    color: var(--ink);
+    font: 12px var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .gslider input {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .gtip {
+    max-width: 320px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+    font-size: 13px;
+  }
+  .gtip strong {
+    font: 600 15px/1.3 var(--font-read);
+  }
+  .gtip code {
+    color: var(--muted);
+    font: 12px var(--font-mono);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .gtip small {
+    align-self: flex-start;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font: 12px var(--font-mono);
+  }
+  .gcount {
+    left: 16px;
+    bottom: 16px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font: 12px var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .gcount i {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+  .gzoom {
+    right: 16px;
+    bottom: 16px;
+    display: flex;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .gzoom button {
+    padding: 6px 12px;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: 13px var(--font-mono);
+    cursor: pointer;
+  }
+  .gzoom button + button {
+    border-left: 1px solid var(--line);
+  }
+  .gzoom button:hover {
+    color: var(--accent);
+  }
+  .gzoom button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  @media (max-width: 720px) {
+    .gfilters {
+      display: none;
     }
   }
 }

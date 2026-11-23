@@ -33,6 +33,7 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 			</div>
 		</article>
 		<aside class="aside" aria-label="Contexto de la nota">
+			@localGraph(n.Path)
 			if len(headings) > 0 {
 				<section>
 					<h2 class="eyebrow">En esta nota</h2>

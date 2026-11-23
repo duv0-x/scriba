@@ -1,0 +1,13 @@
+{
+  "name": "scriba",
+  "version": "0.1.0",
+  "description": "Conecta Claude Code con una base de conocimiento Scriba por MCP: busca contexto antes de trabajar y documenta al terminar.",
+  "author": {
+    "name": "duv0-x",
+    "url": "https://github.com/duv0-x"
+  },
+  "homepage": "https://github.com/duv0-x/scriba",
+  "repository": "https://github.com/duv0-x/scriba",
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["knowledge-base", "mcp", "markdown"]
+}

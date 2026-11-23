@@ -1,0 +1,10 @@
+package web
+
+// themeToggle es el selector de tema de la barra superior; theme.js lo conecta y fija data-modo.
+templ themeToggle() {
+	<button type="button" class="theme-toggle" id="tema" data-modo="sistema" aria-label="Tema: sistema" title="Tema: sistema">
+		@templ.Raw(temaSistemaSVG)
+		@templ.Raw(temaClaroSVG)
+		@templ.Raw(temaOscuroSVG)
+	</button>
+}

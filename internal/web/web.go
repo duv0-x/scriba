@@ -59,11 +59,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(staticFS, "static")
 	files := http.StripPrefix("/static/", http.FileServerFS(noDirFS{static}))
-	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		files.ServeHTTP(w, r)
-	})
+	mux.HandleFunc("GET /static/{file...}", serveStatic(files))
 	mux.HandleFunc("GET /{$}", s.dashboard)
 	mux.HandleFunc("GET /n/{path...}", s.note)
 	mux.HandleFunc("GET /buscar", s.search)
@@ -75,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	s.liveRoutes(mux)
+	s.graphRoutes(mux)
 	s.editorRoutes(mux)
 	if s.State == nil {
 		return mux

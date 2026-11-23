@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "scriba": {
+      "type": "http",
+      "url": "${SCRIBA_URL}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SCRIBA_TOKEN}"
+      }
+    }
+  }
+}

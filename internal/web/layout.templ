@@ -10,10 +10,11 @@ templ layout(sh shell, title string, content templ.Component) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ title }</title>
-			<link rel="icon" href="/static/favicon.svg" type="image/svg+xml"/>
-			<link rel="stylesheet" href="/static/app.css"/>
-			<script src="/static/htmx.min.js" defer></script>
-			<script src="/static/live.js" defer></script>
+			<link rel="icon" href={ asset("favicon.svg") } type="image/svg+xml"/>
+			<link rel="stylesheet" href={ asset("app.css") }/>
+			<script src={ asset("htmx.min.js") } defer></script>
+			<script src={ asset("live.js") } defer></script>
+			<script src={ asset("theme.js") }></script>
 		</head>
 		<body>
 			<div class="app">
@@ -37,6 +38,7 @@ templ layout(sh shell, title string, content templ.Component) {
 							<div class="results" id="resultados" aria-live="polite"></div>
 						</form>
 						<a class="live-badge" id="live" hidden></a>
+						@themeToggle()
 					</header>
 					<main class="view">
 						@content
@@ -67,10 +69,31 @@ templ sidebar(sh shell) {
 		<div>
 			<h2 class="eyebrow">Vistas</h2>
 			<nav class="nav">
-				<a href="/" class={ templ.KV("on", sh.Current == "" && sh.View == "") }>Actividad</a>
-				<a href="/conectores" class={ templ.KV("on", sh.View == "conectores") }>Conectores</a>
+				<a href="/" class={ templ.KV("on", sh.Current == "" && sh.View == "") }>
+					<span class="vl">
+						@templ.Raw(navActividadSVG)
+						Actividad
+					</span>
+				</a>
+				<a href="/grafo" class={ templ.KV("on", sh.View == "grafo") }>
+					<span class="vl">
+						@templ.Raw(navGrafoSVG)
+						Grafo
+					</span>
+				</a>
+				<a href="/conectores" class={ templ.KV("on", sh.View == "conectores") }>
+					<span class="vl">
+						@templ.Raw(navConectoresSVG)
+						Conectores
+					</span>
+				</a>
 				if sh.Agents {
-					<a href="/agentes" class={ templ.KV("on", sh.View == "agentes") }>Agentes</a>
+					<a href="/agentes" class={ templ.KV("on", sh.View == "agentes") }>
+						<span class="vl">
+							@templ.Raw(navAgentesSVG)
+							Agentes
+						</span>
+					</a>
 				}
 			</nav>
 		</div>

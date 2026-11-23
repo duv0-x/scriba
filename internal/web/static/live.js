@@ -92,7 +92,13 @@
   }
 
   const es = new EventSource("/events");
-  es.addEventListener("presence", (e) => presence(JSON.parse(e.data) || []));
+  // Una sola conexión SSE por pestaña: el grafo escucha "scriba:presence" en vez de abrir otra.
+  es.addEventListener("presence", (e) => {
+    const list = JSON.parse(e.data) || [];
+    window.scribaPresence = list;
+    presence(list);
+    dispatchEvent(new CustomEvent("scriba:presence", { detail: list }));
+  });
   es.addEventListener("changed", (e) => {
     const ev = JSON.parse(e.data);
     if (ev.kind === "deleted") {
