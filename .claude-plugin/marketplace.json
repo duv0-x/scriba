@@ -1,0 +1,15 @@
+{
+  "name": "scriba",
+  "description": "Plugins de Scriba para Claude Code",
+  "owner": {
+    "name": "duv0-x",
+    "url": "https://github.com/duv0-x"
+  },
+  "plugins": [
+    {
+      "name": "scriba",
+      "source": "./plugin",
+      "description": "MCP de Scriba, skills para buscar contexto y documentar, y recordatorio al iniciar la sesión."
+    }
+  ]
+}

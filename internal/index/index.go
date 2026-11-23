@@ -302,6 +302,24 @@ func (ix *Index) Outlinks(p string) ([]Link, error) {
 	return out, rows.Err()
 }
 
+// Edges devuelve todos los links resueltos (src, dst) en una sola consulta.
+func (ix *Index) Edges() ([][2]string, error) {
+	rows, err := ix.db.Query(`SELECT src, dst FROM links WHERE dst IS NOT NULL ORDER BY src, rowid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][2]string
+	for rows.Next() {
+		var e [2]string
+		if err := rows.Scan(&e[0], &e[1]); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // Counts devuelve el número de notas por type.
 func (ix *Index) Counts() (map[string]int, error) {
 	rows, err := ix.db.Query(`SELECT type, count(*) FROM notes GROUP BY type`)

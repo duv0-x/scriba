@@ -100,7 +100,7 @@ func TestStatic(t *testing.T) {
 	if res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), "text/css") {
 		t.Fatalf("status %d, Content-Type %q", res.StatusCode, res.Header.Get("Content-Type"))
 	}
-	if res.Header.Get("Cache-Control") != "public, max-age=3600" {
+	if res.Header.Get("Cache-Control") != "no-cache" || res.Header.Get("ETag") == "" { // sin ?v= se revalida
 		t.Errorf("Cache-Control = %q", res.Header.Get("Cache-Control"))
 	}
 }

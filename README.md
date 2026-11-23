@@ -42,6 +42,26 @@ Mientras un agente escribe, la web lo muestra en vivo: el badge "<agente> editan
 
 Cada escritura queda como un commit con el agente como autor (`claude-code-mac via Scriba`). Si GitHub está conectado con push automático, los commits se empujan cada 30 s. Ver [ADR-007](docs/adr/ADR-007-mcp-y-tokens-de-agente.md).
 
+## Plugin de Claude Code
+
+El plugin `scriba` (en [`plugin/`](plugin/)) registra el MCP, añade dos skills (`scriba-contexto` para buscar antes de trabajar y `scriba-documentar` para escribir notas y el journal) y un hook `SessionStart` que le recuerda al agente usarlas.
+
+1. Crea un token en **Agentes** y exporta las dos variables en el shell donde corre Claude Code (por ejemplo, leyéndolas de tu gestor de secretos; nunca en el repo):
+
+   ```sh
+   export SCRIBA_URL=https://<tu-instancia>
+   export SCRIBA_TOKEN=scb_…
+   ```
+
+2. Instala el plugin desde Claude Code:
+
+   ```
+   /plugin marketplace add duv0-x/scriba
+   /plugin install scriba@scriba
+   ```
+
+Si faltan las variables, el hook lo avisa al iniciar la sesión. Sin plugin, basta con el `claude mcp add` que muestra la página **Agentes** (ver [Conectar un agente](#conectar-un-agente)), aunque entonces no tienes las skills ni el recordatorio.
+
 ## Diseño
 
 Ver [`docs/design/README.md`](docs/design/README.md). Las decisiones de arquitectura viven en [`docs/adr/`](docs/adr/).

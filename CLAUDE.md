@@ -24,4 +24,4 @@ Módulo `github.com/duv0-x/scriba`, Go 1.26. En esta Mac el `go` de `/usr/local/
 
 ## Credenciales
 
-Nunca credenciales en variables de entorno ni en el repo. La integración con GitHub se configura desde la pantalla de Conectores de la propia aplicación.
+El servidor nunca lee credenciales de variables de entorno ni del repo: la integración con GitHub se configura desde la pantalla de Conectores de la propia aplicación. El token de agente del plugin de Claude Code (`SCRIBA_TOKEN`) sí vive en el entorno del cliente (ADR-007).
