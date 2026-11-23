@@ -23,10 +23,13 @@ type Resolver interface {
 	Resolve(raw string) (path string, ok bool)
 }
 
-// Heading es un h2 de la nota, para el índice lateral.
-type Heading struct{ ID, Text string }
+// Heading es un h2 o h3 de la nota, para el índice lateral.
+type Heading struct {
+	ID, Text string
+	Level    int
+}
 
-// HTML convierte el Body de una nota a HTML seguro y devuelve el índice de h2.
+// HTML convierte el Body de una nota a HTML seguro y devuelve el índice de h2 y h3.
 func HTML(body string, r Resolver) (template.HTML, []Heading, error) {
 	// Se arma un goldmark por llamada porque el renderer de wikilinks depende del Resolver.
 	md := mdparse.New(
@@ -42,7 +45,7 @@ func HTML(body string, r Resolver) (template.HTML, []Heading, error) {
 	var headings []Heading
 	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
 		h, ok := c.(*ast.Heading)
-		if !ok || h.Level != 2 {
+		if !ok || (h.Level != 2 && h.Level != 3) {
 			continue
 		}
 		var id string
@@ -51,7 +54,7 @@ func HTML(body string, r Resolver) (template.HTML, []Heading, error) {
 				id = string(b)
 			}
 		}
-		headings = append(headings, Heading{ID: id, Text: plainText(src, h)})
+		headings = append(headings, Heading{ID: id, Text: plainText(src, h), Level: h.Level})
 	}
 
 	var buf bytes.Buffer

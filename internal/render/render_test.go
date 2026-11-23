@@ -65,13 +65,13 @@ func TestHTML(t *testing.T) {
 
 func TestHeadings(t *testing.T) {
 	_, hs := render(t, "# Título\n\n## Contexto\n\ntexto\n\n## Decisión **final**\n\n### sub\n", res)
-	if len(hs) != 2 {
-		t.Fatalf("esperaba 2 headings, hay %d: %+v", len(hs), hs)
+	if len(hs) != 3 {
+		t.Fatalf("esperaba 3 headings, hay %d: %+v", len(hs), hs)
 	}
-	want := []string{"Contexto", "Decisión final"}
+	want := []Heading{{Text: "Contexto", Level: 2}, {Text: "Decisión final", Level: 2}, {Text: "sub", Level: 3}}
 	for i, h := range hs {
-		if h.ID == "" || h.Text != want[i] {
-			t.Errorf("heading %d = %+v, esperaba texto %q e ID no vacío", i, h, want[i])
+		if h.ID == "" || h.Text != want[i].Text || h.Level != want[i].Level {
+			t.Errorf("heading %d = %+v, esperaba %+v e ID no vacío", i, h, want[i])
 		}
 	}
 	if hs[0].ID == hs[1].ID {
