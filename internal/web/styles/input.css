@@ -274,6 +274,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     height: 100%;
   }
   .top {
@@ -373,6 +374,8 @@
   }
   .view {
     flex: 1;
+    /* Sin esto el flex item crece con el contenido y la que hace scroll es la página, no .view. */
+    min-height: 0;
     overflow-y: auto;
   }
 
@@ -597,6 +600,27 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .aside li.sub {
+    padding-left: 12px;
+    font-size: 12.5px;
+  }
+  .aside li.sub a:not(.on) {
+    color: var(--muted);
+  }
+  .aside .read-bar {
+    height: 2px;
+    margin: -4px 0 10px;
+    background: var(--line);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .aside .read-bar span {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: var(--accent);
+    transition: width 80ms linear;
   }
   .aside a.toc.on {
     color: var(--accent);
