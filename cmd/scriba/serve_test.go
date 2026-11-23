@@ -164,3 +164,15 @@ func TestApagadoConStreamMCP(t *testing.T) {
 		t.Fatal("el apagado no terminó en 3 s con un stream MCP abierto")
 	}
 }
+
+func TestServeFlagsVacios(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"--vault", dir, "--listen", ""},
+		{"--vault", dir, "--tz", ""},
+	} {
+		if code := serve(args); code != 2 {
+			t.Errorf("serve %v = %d, quiero 2", args, code)
+		}
+	}
+}

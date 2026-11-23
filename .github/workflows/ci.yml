@@ -35,3 +35,13 @@ jobs:
           go generate ./...
           gofmt -l . | tee /dev/stderr | (! read)
           git diff --exit-code
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: actualizador (deploy/scriba-update)
+        run: |
+          sudo useradd --system scriba
+          sudo deploy/test/scriba-update_test.sh

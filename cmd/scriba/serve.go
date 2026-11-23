@@ -45,6 +45,12 @@ func serve(args []string) int {
 		fs.Usage()
 		return 2
 	}
+	// Vacíos llegan desde systemd cuando falta la variable en scriba.env: "" escucharía en todas las
+	// interfaces en un puerto aleatorio y "" como zona sería UTC sin avisar.
+	if *listen == "" || *tz == "" {
+		fmt.Fprintln(os.Stderr, "serve: --listen y --tz no pueden estar vacíos (¿falta SCRIBA_LISTEN o SCRIBA_TZ en scriba.env?)")
+		return 2
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := runServe(ctx, serveOpts{vault: *vaultDir, db: *db, listen: *listen, clientID: *clientID, publicURL: *publicURL, tz: *tz}); err != nil {
@@ -68,6 +74,10 @@ func runServe(ctx context.Context, o serveOpts) error {
 	}
 	// Una instancia nueva arranca sin vault: lo crea el onboarding.
 	if err := os.MkdirAll(vaultDir, 0o755); err != nil {
+		return err
+	}
+	// Con TMPDIR en disco (scriba.service), git y las subidas fallarían si alguien borra el directorio.
+	if err := os.MkdirAll(os.TempDir(), 0o700); err != nil {
 		return err
 	}
 	v, err := vault.Open(vaultDir)

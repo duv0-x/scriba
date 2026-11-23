@@ -1,0 +1,55 @@
+# Scriba como servicio de systemd. Instalación: ver la sección "Instalar con systemd" del README.
+[Unit]
+Description=Scriba
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=scriba
+Group=scriba
+WorkingDirectory=/scriba
+# Scriba no lee variables de entorno: systemd expande ${VAR} desde este archivo en los flags de ExecStart.
+EnvironmentFile=/scriba/scriba.env
+# El zip subido y el askpass de git van al disco, no al tmpfs de /tmp.
+Environment=TMPDIR=/scriba/data/tmp
+# git busca ~/.config/git/*: con ProtectHome el home real es inaccesible y avisaría en cada comando.
+Environment=HOME=/scriba/data
+# El GC de Go no conoce MemoryMax: con este límite recoge antes de que el kernel mate el proceso.
+Environment=GOMEMLIMIT=160MiB
+ExecStart=/scriba/scriba serve --vault /scriba/data/vault --listen ${SCRIBA_LISTEN} --public-url ${SCRIBA_PUBLIC_URL} --tz ${SCRIBA_TZ}
+Restart=on-failure
+RestartSec=5
+# La Pi (1 GB) se comparte con Gremio.
+MemoryMax=192M
+
+# Solo puede escribir en su directorio de datos.
+ProtectSystem=strict
+ReadWritePaths=/scriba/data
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+# Una syscall bloqueada devuelve un error a git en vez de matarlo con SIGSYS.
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

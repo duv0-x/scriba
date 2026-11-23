@@ -15,10 +15,10 @@ import (
 	"time"
 )
 
-// DefaultClientID es el client_id (público) de la OAuth App "Scriba" con Device
-// Flow habilitado. Lo rellena el dueño al registrar la app; el binario lo usa si
-// no se pasa --github-client-id.
-const DefaultClientID = ""
+// DefaultClientID es el client_id (público) de la OAuth App "Scriba" de duv0-x, con
+// Device Flow y sin caducidad de tokens (Scriba aún no usa el refresh_token). Otra
+// instancia puede usar su propia app con --github-client-id.
+const DefaultClientID = "Ov23ligMXMCVEmn5DJeK"
 
 // Errores centinela de PollToken.
 var (
