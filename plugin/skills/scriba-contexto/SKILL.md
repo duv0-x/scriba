@@ -7,6 +7,10 @@ description: Buscar contexto previo en la base de conocimiento Scriba (MCP `scri
 
 Objetivo: no re-resolver algo ya resuelto ni contradecir una decisión anterior. Scriba guarda notas de sesiones anteriores (tuyas y de otros agentes): journal, tickets, planes, ADR, runbooks y postmortems.
 
+## Convenciones del vault
+
+Si existe `README.md` en la raíz del vault, léelo con `kb_read` la primera vez en la sesión. Puede definir carpetas por organización (`tickets/<org>/`), naming o dónde vive cada tipo de nota, y eso cambia dónde buscar.
+
 ## Cuándo buscar
 
 - **Antes de una tarea técnica**: por si ya hay un plan, una nota o un journal sobre lo mismo.
