@@ -44,7 +44,7 @@ func buildDir(refs []index.NoteRef, prefix, current string) []treeNode {
 			sub[d] = append(sub[d], r)
 			continue
 		}
-		notes = append(notes, treeNode{Label: r.Title, Path: r.Path, Current: r.Path == current})
+		notes = append(notes, treeNode{Label: datedLabel(r.Path, r.Title), Path: r.Path, Current: r.Path == current})
 	}
 	slices.SortFunc(dirs, func(a, b string) int {
 		if prefix == "" {
@@ -86,6 +86,16 @@ var (
 	meses  = []string{"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
 		"septiembre", "octubre", "noviembre", "diciembre"}
 )
+
+// datedLabel pone la fecha del nombre del archivo al inicio del nombre visible, para que el orden
+// se lea de un vistazo; si el título ya empieza por esa fecha, lo deja igual.
+func datedLabel(p, title string) string {
+	d := dateRe.FindString(path.Base(p))
+	if d == "" || strings.HasPrefix(title, d) {
+		return title
+	}
+	return d + " · " + title
+}
 
 // journalGroups agrupa el journal por año y mes (más reciente primero); sin fecha va al final.
 func journalGroups(refs []index.NoteRef, current string) []treeNode {
