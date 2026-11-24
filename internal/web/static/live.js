@@ -3,7 +3,6 @@
 (() => {
   if (!window.EventSource) return;
   const badge = document.getElementById("live");
-  const note = document.querySelector("[data-note]")?.dataset.note;
   const still = matchMedia("(prefers-reduced-motion: reduce)");
   const links = (p) => document.querySelectorAll(`.tree a[data-path="${CSS.escape(p)}"]`);
   const href = (p) => "/n/" + p.split("/").map(encodeURIComponent).join("/");
@@ -101,6 +100,8 @@
   });
   es.addEventListener("changed", (e) => {
     const ev = JSON.parse(e.data);
+    // Se lee en cada evento: con la navegación parcial (ADR-009) la nota abierta cambia sin recargar.
+    const note = document.querySelector("[data-note]")?.dataset.note;
     if (ev.kind === "deleted") {
       links(ev.path).forEach((a) => a.classList.remove("unread", "writing"));
       if (ev.path === note) gone();

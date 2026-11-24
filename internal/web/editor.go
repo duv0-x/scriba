@@ -182,6 +182,7 @@ func (s *Server) renderEditor(w http.ResponseWriter, r *http.Request, status int
 		serverError(w, err)
 		return
 	}
+	sh.View = "editor" // sin navegación parcial: conserva el aviso de cambios sin guardar (ADR-009)
 	page(w, r, status, layout(sh, "Editando "+v.Path+" · Scriba", editorPage(v)))
 }
 

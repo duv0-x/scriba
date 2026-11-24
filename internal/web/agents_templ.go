@@ -188,7 +188,7 @@ func agentsPage(v agentsView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				if !t.Revoked {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<form method=\"post\" action=\"/agentes/revocar\"><button class=\"btn danger\" type=\"submit\" name=\"name\" value=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<form hx-boost=\"false\" method=\"post\" action=\"/agentes/revocar\"><button class=\"btn danger\" type=\"submit\" name=\"name\" value=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -216,7 +216,7 @@ func agentsPage(v agentsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</section><section class=\"conn\"><h2>Nuevo agente</h2><form method=\"post\" action=\"/agentes\" class=\"row\"><input type=\"text\" name=\"name\" required placeholder=\"claude-code-mac\" pattern=\"[a-z0-9][a-z0-9\\-]{0,39}\" maxlength=\"40\" autocomplete=\"off\" aria-label=\"Nombre del agente\"> <button class=\"btn primary\" type=\"submit\">Crear token</button></form></section></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</section><section class=\"conn\"><h2>Nuevo agente</h2><form hx-boost=\"false\" method=\"post\" action=\"/agentes\" class=\"row\"><input type=\"text\" name=\"name\" required placeholder=\"claude-code-mac\" pattern=\"[a-z0-9][a-z0-9\\-]{0,39}\" maxlength=\"40\" autocomplete=\"off\" aria-label=\"Nombre del agente\"> <button class=\"btn primary\" type=\"submit\">Crear token</button></form></section></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

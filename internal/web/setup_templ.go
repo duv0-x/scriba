@@ -53,7 +53,7 @@ func welcomePage(msg string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<section class=\"conn\"><h2>Crear una base nueva</h2><p class=\"desc\">Estructura recomendada con journal, tickets, decisiones, runbooks y plantillas, en un repositorio git local.</p><form method=\"post\" action=\"/bienvenida/nueva\"><button class=\"btn primary\" type=\"submit\">Crear base nueva</button></form></section><section class=\"conn\"><h2>Importar desde GitHub</h2><p class=\"desc\">Conecta tu cuenta y elige el repositorio donde ya vive tu conocimiento.</p><div><a class=\"btn\" href=\"/conectores\">Ir a Conectores</a></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<section class=\"conn\"><h2>Crear una base nueva</h2><p class=\"desc\">Estructura recomendada con journal, tickets, decisiones, runbooks y plantillas, en un repositorio git local.</p><form hx-boost=\"false\" method=\"post\" action=\"/bienvenida/nueva\"><button class=\"btn primary\" type=\"submit\">Crear base nueva</button></form></section><section class=\"conn\"><h2>Importar desde GitHub</h2><p class=\"desc\">Conecta tu cuenta y elige el repositorio donde ya vive tu conocimiento.</p><div><a class=\"btn\" href=\"/conectores\">Ir a Conectores</a></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -90,7 +90,7 @@ func zipCard() templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<section class=\"conn\"><h2>Subir un .zip</h2><p class=\"desc\">Para bases de Obsidian o carpetas locales. Máximo 200 MB.</p><form method=\"post\" action=\"/bienvenida/zip\" enctype=\"multipart/form-data\" class=\"row\"><input type=\"file\" name=\"zip\" accept=\".zip,application/zip\" required aria-label=\"Archivo .zip\"> <button class=\"btn\" type=\"submit\">Subir .zip</button></form></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<section class=\"conn\"><h2>Subir un .zip</h2><p class=\"desc\">Para bases de Obsidian o carpetas locales. Máximo 200 MB.</p><form hx-boost=\"false\" method=\"post\" action=\"/bienvenida/zip\" enctype=\"multipart/form-data\" class=\"row\"><input type=\"file\" name=\"zip\" accept=\".zip,application/zip\" required aria-label=\"Archivo .zip\"> <button class=\"btn\" type=\"submit\">Subir .zip</button></form></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -236,7 +236,7 @@ func ghCard(v ghView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if v.Conn.Repo == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<form method=\"post\" action=\"/conectores/github/repo\" class=\"row\"><select name=\"repo\" required aria-label=\"Repositorio\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<form hx-boost=\"false\" method=\"post\" action=\"/conectores/github/repo\" class=\"row\"><select name=\"repo\" required aria-label=\"Repositorio\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -338,7 +338,7 @@ func ghCard(v ghView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</dd><dt>Sincronización</dt><dd><form method=\"post\" action=\"/conectores/github/push\" class=\"row\">Push automático después de cada commit <button class=\"switch\" type=\"submit\" name=\"push\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</dd><dt>Sincronización</dt><dd><form hx-boost=\"false\" method=\"post\" action=\"/conectores/github/push\" class=\"row\">Push automático después de cada commit <button class=\"switch\" type=\"submit\" name=\"push\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -412,7 +412,7 @@ func ghCard(v ghView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, " <form method=\"post\" action=\"/conectores/github/desconectar\" class=\"end\"><button class=\"btn danger\" type=\"submit\">Desconectar</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, " <form hx-boost=\"false\" method=\"post\" action=\"/conectores/github/desconectar\" class=\"end\"><button class=\"btn danger\" type=\"submit\">Desconectar</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -467,7 +467,7 @@ func ghStartForm() templ.Component {
 			templ_7745c5c3_Var16 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<form method=\"post\" action=\"/conectores/github/iniciar\"><button class=\"btn primary\" type=\"submit\">Conectar con GitHub</button></form>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<form hx-boost=\"false\" method=\"post\" action=\"/conectores/github/iniciar\"><button class=\"btn primary\" type=\"submit\">Conectar con GitHub</button></form>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -168,7 +168,8 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	if r.Header.Get("HX-Request") != "" {
+	// Solo la búsqueda en vivo pide el parcial; Enter en el form llega boosteado y espera la página (ADR-009).
+	if r.Header.Get("HX-Request") != "" && r.Header.Get("HX-Boosted") == "" {
 		page(w, r, http.StatusOK, searchResults(q, hits))
 		return
 	}

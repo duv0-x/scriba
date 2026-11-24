@@ -10,7 +10,7 @@ templ graphPageView(v graphView) {
 	<div class="gmap full" data-grafo="/api/grafo">
 		<canvas role="img" aria-label="Grafo de notas y sus enlaces"></canvas>
 		<div class="gtip" hidden></div>
-		<form class="gfilters" aria-label="Filtros del grafo">
+		<form class="gfilters" hx-boost="false" aria-label="Filtros del grafo">
 			<h2 class="eyebrow">Filtros</h2>
 			<div class="gtypes">
 				for _, t := range v.Types {

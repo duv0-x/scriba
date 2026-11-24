@@ -13,7 +13,7 @@ templ welcomePage(msg string) {
 		<section class="conn">
 			<h2>Crear una base nueva</h2>
 			<p class="desc">Estructura recomendada con journal, tickets, decisiones, runbooks y plantillas, en un repositorio git local.</p>
-			<form method="post" action="/bienvenida/nueva">
+			<form hx-boost="false" method="post" action="/bienvenida/nueva">
 				<button class="btn primary" type="submit">Crear base nueva</button>
 			</form>
 		</section>
@@ -31,7 +31,7 @@ templ zipCard() {
 	<section class="conn">
 		<h2>Subir un .zip</h2>
 		<p class="desc">Para bases de Obsidian o carpetas locales. Máximo 200 MB.</p>
-		<form method="post" action="/bienvenida/zip" enctype="multipart/form-data" class="row">
+		<form hx-boost="false" method="post" action="/bienvenida/zip" enctype="multipart/form-data" class="row">
 			<input type="file" name="zip" accept=".zip,application/zip" required aria-label="Archivo .zip"/>
 			<button class="btn" type="submit">Subir .zip</button>
 		</form>
@@ -79,7 +79,7 @@ templ ghCard(v ghView) {
 		if v.Connected {
 			<p class="desc">Cuenta <b>{ v.Conn.Account }</b> · scope repo</p>
 			if v.Conn.Repo == "" {
-				<form method="post" action="/conectores/github/repo" class="row">
+				<form hx-boost="false" method="post" action="/conectores/github/repo" class="row">
 					<select name="repo" required aria-label="Repositorio">
 						for _, r := range v.Repos {
 							<option value={ r.FullName }>
@@ -106,7 +106,7 @@ templ ghCard(v ghView) {
 					</dd>
 					<dt>Sincronización</dt>
 					<dd>
-						<form method="post" action="/conectores/github/push" class="row">
+						<form hx-boost="false" method="post" action="/conectores/github/push" class="row">
 							Push automático después de cada commit
 							<button class="switch" type="submit" name="push" value={ toggleValue(v.Conn.Push) } role="switch" aria-checked={ boolAttr(v.Conn.Push) } aria-label="Push automático después de cada commit"></button>
 						</form>
@@ -125,7 +125,7 @@ templ ghCard(v ghView) {
 					}
 				</dl>
 			}
-			<form method="post" action="/conectores/github/desconectar" class="end">
+			<form hx-boost="false" method="post" action="/conectores/github/desconectar" class="end">
 				<button class="btn danger" type="submit">Desconectar</button>
 			</form>
 		} else if v.Wait != nil {
@@ -143,7 +143,7 @@ templ ghCard(v ghView) {
 }
 
 templ ghStartForm() {
-	<form method="post" action="/conectores/github/iniciar">
+	<form hx-boost="false" method="post" action="/conectores/github/iniciar">
 		<button class="btn primary" type="submit">Conectar con GitHub</button>
 	</form>
 }
