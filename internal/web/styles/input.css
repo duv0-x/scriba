@@ -380,6 +380,9 @@
     /* Para que .aside mida su alto máximo en cqh contra la vista, no contra la página. */
     container-type: size;
   }
+  .view:focus {
+    outline: none;
+  }
 
   /* Inicio (dashboard) y búsqueda a página completa */
   .dash {

@@ -307,16 +307,27 @@
 
     // Tema: repinta si cambia data-theme o el esquema del sistema.
     const recolor = () => { readColors(); draw(); };
-    new MutationObserver(recolor).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", recolor);
+    const mo = new MutationObserver(recolor), dark = matchMedia("(prefers-color-scheme: dark)"), ro = new ResizeObserver(resize);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    dark.addEventListener("change", recolor);
 
     readColors();
-    new ResizeObserver(resize).observe(canvas);
-    graphs.push({ draw });
+    ro.observe(canvas);
+    const stop = () => { cancelAnimationFrame(raf); mo.disconnect(); ro.disconnect(); dark.removeEventListener("change", recolor); };
+    graphs.push({ box, draw, stop });
     listen();
     run(1);
   }
 
+  // Tras una navegación parcial (ADR-009) suelta los grafos que salieron del DOM e inicia los nuevos.
+  function scan() {
+    for (let i = graphs.length - 1; i >= 0; i--) if (!graphs[i].box.isConnected) graphs.splice(i, 1)[0].stop();
+    document.querySelectorAll("[data-grafo]:not([data-ready])").forEach((b) => {
+      b.dataset.ready = "";
+      init(b, b.dataset.grafo);
+    });
+  }
   window.scribaGrafo = init;
-  document.querySelectorAll("[data-grafo]").forEach((b) => init(b, b.dataset.grafo));
+  document.addEventListener("htmx:after:settle", scan);
+  scan();
 })();

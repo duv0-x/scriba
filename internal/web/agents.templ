@@ -51,7 +51,7 @@ templ agentsPage(v agentsView) {
 								</td>
 								<td>
 									if !t.Revoked {
-										<form method="post" action="/agentes/revocar">
+										<form hx-boost="false" method="post" action="/agentes/revocar">
 											<button class="btn danger" type="submit" name="name" value={ t.Name }>Revocar</button>
 										</form>
 									}
@@ -64,7 +64,7 @@ templ agentsPage(v agentsView) {
 		</section>
 		<section class="conn">
 			<h2>Nuevo agente</h2>
-			<form method="post" action="/agentes" class="row">
+			<form hx-boost="false" method="post" action="/agentes" class="row">
 				<input type="text" name="name" required placeholder="claude-code-mac" pattern="[a-z0-9][a-z0-9\-]{0,39}" maxlength="40" autocomplete="off" aria-label="Nombre del agente"/>
 				<button class="btn primary" type="submit">Crear token</button>
 			</form>

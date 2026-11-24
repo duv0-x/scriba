@@ -16,7 +16,11 @@ templ layout(sh shell, title string, content templ.Component) {
 			<script src={ asset("live.js") } defer></script>
 			<script src={ asset("theme.js") }></script>
 		</head>
-		<body>
+		<body
+			if sh.View != "editor" {
+				hx-boost:inherited="target:.view select:.view swap:outerHTML"
+			}
+		>
 			<div class="app">
 				@sidebar(sh)
 				<div class="main">
@@ -40,7 +44,7 @@ templ layout(sh shell, title string, content templ.Component) {
 						<a class="live-badge" id="live" hidden></a>
 						@themeToggle()
 					</header>
-					<main class="view">
+					<main class="view" tabindex="-1" hx-history-elt data-current={ sh.Current } data-view={ sh.View }>
 						@content
 					</main>
 				</div>
@@ -54,6 +58,34 @@ templ layout(sh shell, title string, content templ.Component) {
 						else if (e.key === "Escape" && res.innerHTML) { res.innerHTML = ""; q.focus(); }
 					});
 					document.addEventListener("click", (e) => { if (!e.target.closest(".search")) res.innerHTML = ""; });
+					// Navegación parcial (ADR-009): solo cambia .view; la sidebar se ajusta a la vista nueva.
+					// Una respuesta sin .view (error en texto plano, JSON, estático) vaciaría la vista: recarga completa.
+					document.addEventListener("htmx:before:swap", (e) => {
+						const ctx = e.detail.ctx;
+						if (!ctx.sourceElement?._htmx?.boosted || /<main[^>]*class="view"/.test(ctx.text || "")) return;
+						e.preventDefault();
+						location.href = ctx.request.action;
+					});
+					let restored = false;
+					document.addEventListener("htmx:before:history:restore", () => { restored = true; });
+					document.addEventListener("htmx:after:settle", (e) => {
+						if (!e.target.matches?.(".view")) return; // la búsqueda en vivo también dispara settle
+						const v = document.querySelector(".view"), cur = v.dataset.current, view = v.dataset.view;
+						if (restored) v.scrollTop = 0; // atrás/adelante reusan el mismo .view (outerSync) con su scroll
+						restored = false;
+						if (!document.querySelector(".reader")) window.scribaLector?.abort();
+						// El enlace pulsado pudo salir del DOM: el foco va a la vista nueva para que el lector de pantalla la lea.
+						const f = document.activeElement;
+						if (!f || f === document.body || !f.isConnected) v.focus({ preventScroll: true });
+						res.innerHTML = "";
+						document.querySelectorAll(".tree a[aria-current]").forEach((a) => a.removeAttribute("aria-current"));
+						document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("on", !cur && a.dataset.v === view));
+						const a = cur && document.querySelector(`.tree a[data-path="${CSS.escape(cur)}"]`);
+						if (!a) return;
+						a.setAttribute("aria-current", "page");
+						a.classList.remove("unread");
+						for (let d = a.closest("details"); d; d = d.parentElement.closest("details")) d.open = true;
+					});
 				})();
 			</script>
 		</body>
@@ -69,26 +101,26 @@ templ sidebar(sh shell) {
 		<div>
 			<h2 class="eyebrow">Vistas</h2>
 			<nav class="nav">
-				<a href="/" class={ templ.KV("on", sh.Current == "" && sh.View == "") }>
+				<a href="/" class={ templ.KV("on", sh.Current == "" && sh.View == "") } data-v="">
 					<span class="vl">
 						@templ.Raw(navActividadSVG)
 						Actividad
 					</span>
 				</a>
-				<a href="/grafo" class={ templ.KV("on", sh.View == "grafo") }>
+				<a href="/grafo" class={ templ.KV("on", sh.View == "grafo") } data-v="grafo">
 					<span class="vl">
 						@templ.Raw(navGrafoSVG)
 						Grafo
 					</span>
 				</a>
-				<a href="/conectores" class={ templ.KV("on", sh.View == "conectores") }>
+				<a href="/conectores" class={ templ.KV("on", sh.View == "conectores") } data-v="conectores">
 					<span class="vl">
 						@templ.Raw(navConectoresSVG)
 						Conectores
 					</span>
 				</a>
 				if sh.Agents {
-					<a href="/agentes" class={ templ.KV("on", sh.View == "agentes") }>
+					<a href="/agentes" class={ templ.KV("on", sh.View == "agentes") } data-v="agentes">
 						<span class="vl">
 							@templ.Raw(navAgentesSVG)
 							Agentes

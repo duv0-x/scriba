@@ -35,7 +35,7 @@ func graphPageView(v graphView) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"gmap full\" data-grafo=\"/api/grafo\"><canvas role=\"img\" aria-label=\"Grafo de notas y sus enlaces\"></canvas><div class=\"gtip\" hidden></div><form class=\"gfilters\" aria-label=\"Filtros del grafo\"><h2 class=\"eyebrow\">Filtros</h2><div class=\"gtypes\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"gmap full\" data-grafo=\"/api/grafo\"><canvas role=\"img\" aria-label=\"Grafo de notas y sus enlaces\"></canvas><div class=\"gtip\" hidden></div><form class=\"gfilters\" hx-boost=\"false\" aria-label=\"Filtros del grafo\"><h2 class=\"eyebrow\">Filtros</h2><div class=\"gtypes\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
