@@ -377,6 +377,8 @@
     /* Sin esto el flex item crece con el contenido y la que hace scroll es la página, no .view. */
     min-height: 0;
     overflow-y: auto;
+    /* Para que .aside mida su alto máximo en cqh contra la vista, no contra la página. */
+    container-type: size;
   }
 
   /* Inicio (dashboard) y búsqueda a página completa */
@@ -580,6 +582,11 @@
     gap: 22px;
     padding-top: 4px;
     font-size: 13px;
+    /* Si no cabe en la vista, scroll propio en lugar de esperar al final de la nota. */
+    max-height: 100cqh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
   }
   .aside ul {
     display: flex;
@@ -951,6 +958,8 @@
     }
     .aside {
       position: static;
+      max-height: none;
+      overflow: visible;
     }
   }
   @media (max-width: 720px) {
