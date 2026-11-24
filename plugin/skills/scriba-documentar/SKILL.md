@@ -7,6 +7,10 @@ description: Escribir en la base de conocimiento Scriba (MCP `scriba`) — notas
 
 Cada escritura queda como un commit a nombre de tu agente. Antes de crear una nota nueva, busca con `kb_search` si ya existe una sobre lo mismo y, si existe, actualízala en lugar de duplicarla.
 
+**Convenciones del vault primero:** si existe `README.md` en la raíz, léelo con `kb_read` antes de la primera escritura de la sesión. Lo que defina (carpetas por organización, naming, claves de frontmatter, contenido obligatorio de una nota, idioma) **manda sobre esta skill**; lo de abajo son los defaults para vaults sin convenciones propias.
+
+**Muestra siempre la URL:** `kb_write`, `kb_append` y `kb_log_journal` devuelven la `url` de la nota en el lector web. Después de cada escritura, dale al usuario esa URL junto a la ruta para que pueda consultarla.
+
 ## 1. ¿Amerita nota?
 
 **Sí**: plan de implementación, decisión de arquitectura o tecnología, investigación con conclusiones, cambio con impacto en producción, procedimiento operativo que emergió del trabajo, o un problema no trivial y cómo se resolvió.
@@ -70,5 +74,5 @@ Qué va en el journal: qué tarea se trabajó y por qué, las decisiones y su ra
 Cuando el usuario tenga que revisar un plan antes de implementarlo:
 
 1. Escríbelo con `kb_write` en `plans/YYYY-MM-DD-<id>-slug.md` (`status: "proposed"`).
-2. Llama a `kb_open` con esa ruta y dale al usuario la URL que devuelve para que lo lea en el lector web.
+2. Dale al usuario la URL que devolvió `kb_write` (o `kb_open` si el plan ya existía) para que lo lea en el lector web.
 3. Espera su aprobación; al aprobarlo, actualiza el `status` y enlaza el plan desde el ticket y el journal.
