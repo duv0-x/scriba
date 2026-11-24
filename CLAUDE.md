@@ -4,7 +4,7 @@ El dueño es Duván Ballén (Senior Platform Engineer, aprendiendo Go). Comuníc
 
 ## Estado
 
-MVP en construcción (issue duv0-x/scriba#1). El plan de implementación está en `/Users/lx-duv0-x/Documents/ia-kb/plans/2026-11-16-scriba-1-mvp-y-migracion.md`. Cada decisión de diseño, arquitectura o stack se documenta antes como ADR en `docs/adr/ADR-NNN-titulo.md`, antes de implementarla.
+MVP entregado (duv0-x/scriba#1, cerrado). La instancia propia es https://kb.duv0-x.cloud, con despliegue GitOps en duv0-x/kb.duv0-x.cloud (`scriba.version`). Los planes y notas de cada ticket viven en esa misma base de conocimiento: `plans/` y `tickets/personal/`, vía el MCP `scriba`. El trabajo pendiente está en los issues abiertos. Cada decisión de diseño, arquitectura o stack se documenta antes como ADR en `docs/adr/ADR-NNN-titulo.md`, antes de implementarla.
 
 ## Qué es
 
