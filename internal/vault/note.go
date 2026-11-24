@@ -3,6 +3,7 @@ package vault
 import (
 	"fmt"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -34,6 +35,8 @@ var KnownTypes = []string{"journal", "tickets", "plans", "decisions", "runbooks"
 
 // md es el mismo parser que usa el lector (render): solo cuentan los wikilinks que se ven como enlace.
 var md = mdparse.New()
+
+var dayRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func parse(rel, content string) *Note {
 	n := &Note{Path: rel, Meta: map[string]any{}, Body: content}
@@ -76,6 +79,10 @@ func parse(rel, content string) *Note {
 	}
 	if n.Date == "" && n.Type == "journal" {
 		n.Date = base
+	}
+	// Formato de Scriba: la nota diaria del journal se titula con su fecha, diga lo que diga el frontmatter.
+	if n.Type == "journal" && dayRe.MatchString(base) {
+		n.Title = base
 	}
 
 	n.Tags = parseTags(n.Meta["tags"])

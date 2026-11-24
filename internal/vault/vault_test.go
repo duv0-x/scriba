@@ -263,3 +263,16 @@ func TestIgnoredSinMayusculas(t *testing.T) {
 		t.Error("templates no debería ignorarse")
 	}
 }
+
+func TestTituloJournal(t *testing.T) {
+	for _, tt := range []struct{ rel, content, want string }{
+		{"journal/2026-08-05.md", "---\ntitle: \"Journal 2026-08-05\"\n---\n# 2026-08-05\n", "2026-08-05"},
+		{"journal/2025-04-29.md", "---\ntitle: \"Sesión de setup\"\n---\nhola", "2025-04-29"},
+		{"journal/2026-11-16-retro.md", "---\ntitle: \"Retro\"\n---\n", "Retro"},
+		{"tickets/2026-08-05.md", "---\ntitle: \"Ticket\"\n---\n", "Ticket"},
+	} {
+		if got := parse(tt.rel, tt.content).Title; got != tt.want {
+			t.Errorf("%s: Title=%q, quiero %q", tt.rel, got, tt.want)
+		}
+	}
+}
