@@ -227,3 +227,15 @@ func TestStaticNoDirs(t *testing.T) {
 		}
 	}
 }
+
+func TestDatedLabel(t *testing.T) {
+	for _, tt := range []struct{ p, title, want string }{
+		{"tickets/personal/2026-11-23-scriba-14-x.md", "scriba#14 — Navegación", "2026-11-23 · scriba#14 — Navegación"},
+		{"plans/2026-11-16-plan.md", "2026-11-16 · Plan", "2026-11-16 · Plan"},
+		{"runbooks/rotar-certificados.md", "Rotar certificados", "Rotar certificados"},
+	} {
+		if got := datedLabel(tt.p, tt.title); got != tt.want {
+			t.Errorf("datedLabel(%q, %q) = %q; quiero %q", tt.p, tt.title, got, tt.want)
+		}
+	}
+}
