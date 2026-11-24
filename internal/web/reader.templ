@@ -34,17 +34,22 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 		</article>
 		<aside class="aside" aria-label="Contexto de la nota">
 			@localGraph(n.Path)
-			if len(headings) > 0 {
-				<section>
-					<h2 class="eyebrow">En esta nota</h2>
-					<div class="read-bar" aria-hidden="true"><span></span></div>
+			<section>
+				<h2 class="eyebrow">En esta nota</h2>
+				<div class="read-bar" aria-hidden="true"><span></span></div>
+				<div class="read-meta">
+					<span>{ strconv.Itoa(readingMinutes(n.Words)) } min de lectura</span>
+					<span class="pct" aria-live="off">0 %</span>
+				</div>
+				if len(headings) > 0 {
 					<ul>
 						for _, h := range headings {
 							<li class={ templ.KV("sub", h.Level == 3) }><a class="toc" href={ templ.SafeURL("#" + h.ID) } data-id={ h.ID }>{ h.Text }</a></li>
 						}
 					</ul>
-				</section>
-				<script>
+				}
+			</section>
+			<script>
 					// Marca en "En esta nota" la sección que se está leyendo y llena la barra según el scroll.
 					(() => {
 						const links = new Map([...document.querySelectorAll(".aside a.toc")].map(a => [a.dataset.id, a]));
@@ -58,18 +63,19 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 
 						const art = document.querySelector(".reader article");
 						const bar = document.querySelector(".aside .read-bar span");
+						const pct = document.querySelector(".aside .read-meta .pct");
 						const update = () => {
 							const r = art.getBoundingClientRect(), v = root.getBoundingClientRect();
 							const span = r.height - root.clientHeight;
-							const p = span <= 0 ? 1 : (v.top - r.top) / span;
-							bar.style.width = (Math.min(1, Math.max(0, p)) * 100) + "%";
+							const p = Math.min(1, Math.max(0, span <= 0 ? 1 : (v.top - r.top) / span));
+							bar.style.width = (p * 100) + "%";
+							pct.textContent = Math.round(p * 100) + " %";
 						};
 						root.addEventListener("scroll", update, { passive: true });
 						addEventListener("resize", update);
 						update();
 					})();
 				</script>
-			}
 			<section>
 				<h2 class="eyebrow">Enlazada desde · { strconv.Itoa(len(back)) }</h2>
 				if len(back) == 0 {
@@ -91,8 +97,6 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 					}
 					<dt>Palabras</dt>
 					<dd>{ strconv.Itoa(n.Words) }</dd>
-					<dt>Lectura</dt>
-					<dd>{ strconv.Itoa(readingMinutes(n.Words)) } min</dd>
 				</dl>
 			</section>
 		</aside>
