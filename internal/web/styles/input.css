@@ -609,11 +609,22 @@
     color: var(--muted);
   }
   .aside .read-bar {
-    height: 2px;
-    margin: -4px 0 10px;
+    height: 4px;
+    margin-top: -2px;
     background: var(--line);
-    border-radius: 1px;
+    border-radius: 2px;
     overflow: hidden;
+  }
+  .aside .read-meta {
+    display: flex;
+    justify-content: space-between;
+    margin: 6px 0 12px;
+    color: var(--muted);
+    font: 12px var(--font-mono);
+  }
+  .aside .read-meta .pct {
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
   }
   .aside .read-bar span {
     display: block;
