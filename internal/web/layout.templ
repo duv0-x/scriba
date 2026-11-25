@@ -75,9 +75,10 @@ templ layout(sh shell, title string, content templ.Component) {
 						restored = false;
 						if (!document.querySelector(".reader")) window.scribaLector?.abort();
 						// El enlace pulsado pudo salir del DOM: el foco va a la vista nueva para que el lector de pantalla la lea.
+						res.innerHTML = "";
+						q.value = "";
 						const f = document.activeElement;
 						if (!f || f === document.body || !f.isConnected) v.focus({ preventScroll: true });
-						res.innerHTML = "";
 						document.querySelectorAll(".tree a[aria-current]").forEach((a) => a.removeAttribute("aria-current"));
 						document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("on", !cur && a.dataset.v === view));
 						const a = cur && document.querySelector(`.tree a[data-path="${CSS.escape(cur)}"]`);

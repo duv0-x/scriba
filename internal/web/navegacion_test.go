@@ -35,3 +35,13 @@ func TestNavegacionParcial(t *testing.T) {
 		t.Error("el editor debe marcar data-view=editor")
 	}
 }
+
+func TestBusquedaLimpiaAntesDeMoverFoco(t *testing.T) {
+	h, _ := newEditor(t, true)
+	_, body := get(t, h, "/n/notes/hoy.md", nil)
+	compact := strings.Join(strings.Fields(body), "")
+	const want = `res.innerHTML="";q.value="";constf=document.activeElement;`
+	if !strings.Contains(compact, want) {
+		t.Error("los resultados y #q deben limpiarse antes de comprobar el foco")
+	}
+}

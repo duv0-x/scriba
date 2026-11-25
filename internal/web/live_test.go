@@ -222,3 +222,21 @@ func TestDiffH1YFrontmatterPegados(t *testing.T) {
 		})
 	}
 }
+
+func TestLiveJSNavegacionParcial(t *testing.T) {
+	e := newLiveServer(t, false)
+	_, js := get(t, e.h, "/static/live.js", nil)
+	compact := strings.Join(strings.Fields(js), "")
+	for _, want := range []string{
+		`constpath=location.pathname;`,
+		`fetch(path+"?fragmento=1"`,
+		`if(path!==location.pathname)return;`,
+		`prose.innerHTML=html;window.htmx?.process(prose);play(prose);`,
+		`constdone=()=>window.htmx?.process(prose);`,
+		`caret.remove();done();`,
+	} {
+		if !strings.Contains(compact, want) {
+			t.Errorf("live.js sin %q", want)
+		}
+	}
+}
