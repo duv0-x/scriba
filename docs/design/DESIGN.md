@@ -43,6 +43,7 @@ Dark is a re-tuned palette, never an inversion.
 - Note reader: reading column (max 68ch) + right context rail 240px (outline "In this note", backlinks "Linked from", properties: date, author agent, words, reading time). Rail collapses below the article under 1000px.
 - Dashboard: summary tiles row (Notes, Words, Indexed, Disk) → contribution heatmap (52 weeks × 7 days, 11px cells, 5 accent steps) → two columns: recent activity by agent, storage breakdown bar with legend.
 - Editor: split view, Markdown source in mono on the left, live preview on the right.
+- Connector consent: same single column as Connectors; one highlighted card with the client name, the return host, the agent name input, a primary "Aprobar" and a secondary "Rechazar".
 
 ## Components
 - **Wikilink:** accent text with a 1px underline at 40% accent; missing target = muted text with dashed underline.

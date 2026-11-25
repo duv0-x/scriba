@@ -51,3 +51,4 @@ Un login propio con enlace mágico, como el [ADR-009 de Gremio](https://github.c
 ## Links relacionados
 
 - [ADR-002: vault en Markdown y git](ADR-002-vault-markdown-y-git.md) (autor de los commits por agente).
+- [ADR-010: OAuth para conectores](ADR-010-oauth-conectores.md) (enmienda la sección 2).
