@@ -49,20 +49,22 @@ templ dashboardPage(d dashData) {
 					Más
 				</div>
 			</div>
-			<div class="heat-wrap">
-				<div class="heat">
-					for _, c := range d.Heat {
-						if c.Future {
-							<i class="fut"></i>
-						} else {
-							<i data-l={ strconv.Itoa(c.Level) } title={ c.Title }></i>
+			<div class="heat-wrap" tabindex="0" role="region" aria-label="Historial anual de notas">
+				<div class="heat-inner">
+					<div class="heat">
+						for _, c := range d.Heat {
+							if c.Future {
+								<i class="fut"></i>
+							} else {
+								<i data-l={ strconv.Itoa(c.Level) } title={ c.Title }></i>
+							}
 						}
-					}
-				</div>
-				<div class="heat-months" aria-hidden="true">
-					for _, m := range d.Months {
-						<span>{ m }</span>
-					}
+					</div>
+					<div class="heat-months" aria-hidden="true">
+						for _, m := range d.Months {
+							<span>{ m }</span>
+						}
+					</div>
 				</div>
 			</div>
 		</section>

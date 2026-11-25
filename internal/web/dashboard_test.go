@@ -107,6 +107,19 @@ func TestDashboard(t *testing.T) {
 	}
 }
 
+func TestHeatmapRegionTeclado(t *testing.T) {
+	s, _ := dashVault(t, true)
+	_, body := get(t, s.Handler(), "/", nil)
+	for _, want := range []string{
+		`class="heat-wrap" tabindex="0" role="region" aria-label="Historial anual de notas"`,
+		`class="heat-inner"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard sin %q", want)
+		}
+	}
+}
+
 func TestDashboardSinGit(t *testing.T) {
 	s, _ := dashVault(t, false)
 	res, body := get(t, s.Handler(), "/", nil)
