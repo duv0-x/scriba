@@ -50,6 +50,8 @@ type Server struct {
 	Presence *events.Presence // qué agente está escribiendo qué nota
 	W        *writer.Writer   // escrituras desde el editor web
 
+	KindleEndpoint string // API de Resend para el conector Kindle; "" = la real (los tests usan otra)
+
 	mu  sync.Mutex
 	dev *pendingDevice // device flow de GitHub en curso
 
@@ -147,7 +149,12 @@ func (s *Server) note(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	page(w, r, http.StatusOK, layout(sh, n.Title+" · Scriba", readerPage(n, body, headings, back, banner, s.W != nil)))
+	_, kindleOn, err := s.kindleConnector()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	page(w, r, http.StatusOK, layout(sh, n.Title+" · Scriba", readerPage(n, body, headings, back, banner, s.W != nil, kindleOn)))
 }
 
 // readNote solo sirve .md fuera de directorios ocultos: el vault es un repo git y .git/config no es una nota.
