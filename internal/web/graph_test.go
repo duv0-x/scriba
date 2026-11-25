@@ -78,6 +78,9 @@ func TestGraphPages(t *testing.T) {
 		has    []string
 	}{
 		{"/grafo", []string{`<canvas`, `data-grafo="/api/grafo"`, `name="tipo" value="decisions"`, "Mostrar huérfanas",
+			`class="menu-button graph-toggle" popovertarget="graph-filters"`,
+			`aria-controls="graph-filters" aria-label="Abrir filtros del grafo"`,
+			`class="gfilters" id="graph-filters" popover="auto"`,
 			"Tamaño de nodos", "Grosor de enlaces", "Distancia", "3 notas · 2 enlaces", `href="/grafo" class="on"`, "/static/graph.js"}},
 		{"/n/decisions/personal/adr-001.md", []string{"Grafo local", "Abrir grafo",
 			`data-grafo="/api/grafo?centro=decisions%2Fpersonal%2Fadr-001.md"`, "/static/graph.js"}},

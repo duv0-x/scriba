@@ -124,6 +124,24 @@
 
 /* Componentes con nombre: copian proporciones del prototipo aprobado (DESIGN.md). */
 @layer components {
+  .menu-button { display: none; }
+  .side[popover] {
+    position: static;
+    inset: auto;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-right: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .gfilters[popover] {
+    inset: 16px 16px auto auto;
+    margin: 0;
+  }
   .app {
     display: grid;
     grid-template-columns: 248px 1fr;
@@ -969,9 +987,33 @@
     .app {
       grid-template-columns: 1fr;
     }
-    .side {
-      display: none;
+    .menu-button {
+      display: inline-grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      flex: none;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
     }
+    .side[popover] {
+      display: none;
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: min(84vw, 320px);
+      height: 100dvh;
+      max-height: none;
+      margin: 0;
+      border-right: 1px solid var(--line);
+      border-radius: 0;
+      box-shadow: 0 12px 32px rgb(0 0 0 / 0.12);
+    }
+    .side[popover]:popover-open { display: flex; }
+    .side[popover]::backdrop { background: rgb(28 34 39 / 0.28); }
     .top {
       padding: 10px 16px;
     }
@@ -1168,6 +1210,13 @@
   }
   .heat-wrap {
     overflow-x: auto;
+  }
+  .heat-inner { flex: none; }
+  @media (max-width: 720px) {
+    .heat-wrap {
+      display: flex;
+      flex-direction: row-reverse;
+    }
   }
   .heat,
   .heat-months {
@@ -1717,8 +1766,20 @@
     outline-offset: -2px;
   }
   @media (max-width: 720px) {
-    .gfilters {
-      display: none;
+    .graph-toggle {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 2;
     }
+    .gfilters[popover] {
+      display: none;
+      position: fixed;
+      inset: 16px 16px auto auto;
+      width: min(320px, calc(100vw - 32px));
+      max-height: calc(100dvh - 32px);
+      margin: 0;
+    }
+    .gfilters[popover]:popover-open { display: flex; }
   }
 }

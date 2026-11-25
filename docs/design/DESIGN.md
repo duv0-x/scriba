@@ -40,8 +40,9 @@ Dark is a re-tuned palette, never an inversion.
 
 ## Layout
 - App shell: left sidebar 248px (brand, views, note types with counts, file tree in mono) · main column · top bar with search.
+- Under 720px, a 44×44px menu button opens the same sidebar as a left non-modal popover drawer: `min(84vw, 320px)` wide, full height, `paper` background, right hairline and a 28% dark backdrop. Light dismiss, Escape and navigation close it; no swipe or slide animation. Graph filters use the same pattern and 44×44px trigger.
 - Note reader: reading column (max 68ch) + right context rail 240px (outline "In this note", backlinks "Linked from", properties: date, author agent, words, reading time). Rail collapses below the article under 1000px.
-- Dashboard: summary tiles row (Notes, Words, Indexed, Disk) → contribution heatmap (52 weeks × 7 days, 11px cells, 5 accent steps) → two columns: recent activity by agent, storage breakdown bar with legend.
+- Dashboard: summary tiles row (Notes, Words, Indexed, Disk) → contribution heatmap (52 weeks × 7 days, 11px cells, 5 accent steps) → two columns: recent activity by agent, storage breakdown bar with legend. Under 720px the heatmap opens on the current week and remains a named, keyboard-scrollable region; desktop alignment is unchanged.
 - Editor: split view, Markdown source in mono on the left, live preview on the right.
 - Connector consent: same single column as Connectors; one highlighted card with the client name, the return host, the agent name input, a primary "Aprobar" and a secondary "Rechazar".
 
@@ -53,6 +54,7 @@ Dark is a re-tuned palette, never an inversion.
 - **Search (⌘K):** input with leading icon and kbd hint; floating results list with title, mono path, and snippet with highlighted match.
 - **Chips:** note type in accent-soft; tags as outlined muted pills prefixed with #.
 - **Buttons:** primary = solid accent with surface-colored text; secondary = surface with 1px line border, accent on hover.
+- **Mobile icon buttons:** navigation and graph-filter triggers have a 44×44px touch target with an 18×18px icon, `surface` background and a 1px `line` border.
 - **Blockquote:** 3px accent left rule, italic, muted.
 - **Tables:** sans 14px, hairline row dividers, no zebra stripes, no vertical borders.
 

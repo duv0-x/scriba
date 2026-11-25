@@ -36,6 +36,22 @@ func TestNavegacionParcial(t *testing.T) {
 	}
 }
 
+func TestDrawerMovil(t *testing.T) {
+	h, _ := newEditor(t, true)
+	_, body := get(t, h, "/n/notes/hoy.md", nil)
+	for _, want := range []string{
+		`class="menu-button nav-toggle" popovertarget="nav-drawer"`,
+		`aria-controls="nav-drawer" aria-label="Abrir navegación"`,
+		`class="side" id="nav-drawer" popover="auto"`,
+		`matchMedia("(max-width: 720px)")`,
+		`closeOverlays();`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("layout sin %q", want)
+		}
+	}
+}
+
 func TestBusquedaLimpiaAntesDeMoverFoco(t *testing.T) {
 	h, _ := newEditor(t, true)
 	_, body := get(t, h, "/n/notes/hoy.md", nil)
