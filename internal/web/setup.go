@@ -104,6 +104,10 @@ func (s *Server) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /conectores/github/repo", s.ghRepo)
 	mux.HandleFunc("POST /conectores/github/push", s.ghPush)
 	mux.HandleFunc("POST /conectores/github/desconectar", s.ghDisconnect)
+	mux.HandleFunc("POST /conectores/kindle", s.kindleSave)
+	mux.HandleFunc("POST /conectores/kindle/prueba", s.kindleTest)
+	mux.HandleFunc("POST /conectores/kindle/desconectar", s.kindleDisconnect)
+	mux.HandleFunc("POST /kindle/{path...}", s.kindleNote)
 }
 
 // sameOrigin es la defensa CSRF de los POST: sin cookies de sesión en el MVP (la instancia va tras Access).
@@ -291,6 +295,7 @@ type ghView struct {
 	VaultEmpty bool
 	NoClientID bool
 	Msg        string
+	Kindle     kindleView
 }
 
 func (s *Server) connectors(w http.ResponseWriter, r *http.Request) {
@@ -325,6 +330,12 @@ func (s *Server) renderConnectors(w http.ResponseWriter, r *http.Request, status
 		}
 		s.mu.Unlock()
 	}
+	kc, active, err := s.kindleConnector()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	v.Kindle = kindleView{To: kc.Account, From: kc.Repo, Active: active}
 	sh, err := s.shellFor(r, "")
 	if err != nil {
 		serverError(w, err)

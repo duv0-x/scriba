@@ -48,6 +48,7 @@ templ connectorsPage(v ghView) {
 			<p class="alert" role="alert">{ v.Msg }</p>
 		}
 		@ghCard(v)
+		@kindleCard(v.Kindle)
 		<section class="conn off" aria-disabled="true">
 			<div class="conn-head">
 				<h2>Confluence</h2>
@@ -166,4 +167,63 @@ templ ghWaitFailed(msg string) {
 		<p class="alert" role="alert">{ msg }</p>
 		@ghStartForm()
 	</div>
+}
+
+// kindleCard es el conector Kindle; la API key nunca vuelve al HTML: guardada, solo se dice "configurada".
+templ kindleCard(k kindleView) {
+	<section class="conn">
+		<div class="conn-head">
+			<h2>Kindle</h2>
+			if k.Active {
+				<span class="pill ok">Conectado</span>
+			} else {
+				<span class="pill">Desconectado</span>
+			}
+		</div>
+		<p class="desc">Manda cualquier nota a tu Kindle como EPUB desde el lector. El correo sale por tu cuenta de Resend.</p>
+		<form hx-boost="false" method="post" action="/conectores/kindle" class="fields">
+			<label>
+				Correo de la Kindle
+				<input type="email" name="to" value={ k.To } required placeholder="tu-nombre@kindle.com" autocomplete="off"/>
+			</label>
+			<label>
+				Remitente
+				<input type="text" name="from" value={ k.From } required placeholder="Scriba <kindle@tu-dominio.com>" autocomplete="off"/>
+			</label>
+			<label>
+				API key de Resend
+				if k.Active {
+					<input type="password" name="key" placeholder="Configurada · déjala vacía para conservarla" autocomplete="new-password"/>
+				} else {
+					<input type="password" name="key" required placeholder="re_…" autocomplete="new-password"/>
+				}
+			</label>
+			<div class="row">
+				<button class="btn primary" type="submit">Guardar</button>
+			</div>
+		</form>
+		<p class="note">Antes de enviar, aprueba el remitente en Amazon: Contenido y dispositivos → Preferencias → Configuración de documentos personales → Lista de correos aprobados. Sin eso, Amazon descarta el envío en silencio aunque Resend responda 200.</p>
+		if k.Active {
+			<div class="end">
+				@kindleButton("/conectores/kindle/prueba", "Enviar prueba")
+				<form hx-boost="false" method="post" action="/conectores/kindle/desconectar">
+					<button class="btn danger" type="submit">Desconectar</button>
+				</form>
+			</div>
+		}
+	</section>
+}
+
+// kindleButton envía por htmx; la respuesta (kindleResult) lo reemplaza sin recargar la página.
+templ kindleButton(action, label string) {
+	<button class="btn" type="button" hx-post={ action } hx-target="this" hx-swap="outerHTML">{ label }</button>
+}
+
+// kindleResult es el estado que reemplaza al botón: msg vacío = enviado.
+templ kindleResult(msg string) {
+	if msg == "" {
+		<span class="pill ok" role="status">Enviado a tu Kindle</span>
+	} else {
+		<span class="alert" role="alert">{ msg }</span>
+	}
 }

@@ -755,13 +755,29 @@
   .conn .end {
     display: flex;
     justify-content: flex-end;
+    gap: 10px;
     border-top: 1px solid var(--line);
     padding-top: 14px;
   }
+  .conn .fields {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .conn .fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
   .conn select,
   .conn input[type="text"],
+  .conn input[type="email"],
+  .conn input[type="password"],
   .conn input[type="file"] {
     min-width: 260px;
+    max-width: 100%;
     padding: 7px 10px;
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -1038,6 +1054,18 @@
   }
   .title-row .btn {
     flex: none;
+    margin-top: 6px;
+  }
+  .title-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+  .title-actions .pill,
+  .title-actions .alert {
     margin-top: 6px;
   }
   .editor {
