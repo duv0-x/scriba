@@ -12,7 +12,9 @@ require (
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/yuin/goldmark v1.8.7
 	go.abhg.dev/goldmark/wikilink v0.6.0
+	golang.org/x/net v0.61.0
 	golang.org/x/term v0.47.0
+	golang.org/x/text v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -45,10 +47,8 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 )

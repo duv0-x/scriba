@@ -1,0 +1,24 @@
+/* Kindle ignora parte del CSS: todo degrada a texto plano legible.
+   Sin font-family en body, para que mande la fuente que elija el lector. Portado de Papiro. */
+body { margin: 0; text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+
+hr { border: 0; border-top: 1px solid #000; margin: 1em 0; }
+
+h1.title { font-family: serif; font-size: 1.7em; line-height: 1.15; text-align: center; margin: .6em 0 .4em; page-break-after: avoid; }
+.meta { font-size: .75em; text-transform: uppercase; letter-spacing: .08em; text-align: center; margin: 0; }
+
+h1, h2 { font-size: 1.15em; margin: 1.6em 0 .5em; text-align: left; page-break-after: avoid; }
+h3, h4, h5, h6 { font-size: 1em; margin: 1.2em 0 .4em; text-align: left; page-break-after: avoid; }
+p { margin: 0 0 .6em; line-height: 1.5; }
+li { line-height: 1.5; }
+blockquote { margin: .6em 0 .6em 1em; font-style: italic; }
+
+/* El código conserva saltos de línea e indentación; las líneas largas se parten. */
+pre { font-family: monospace; font-size: .8em; line-height: 1.35; text-align: left; white-space: pre-wrap; word-wrap: break-word; margin: .6em 0 1em; padding: .4em 0 .4em .7em; border-left: 3px solid #000; hyphens: none; -webkit-hyphens: none; }
+code { font-family: monospace; }
+
+table { border-collapse: collapse; margin: .6em 0 1em; font-size: .85em; text-align: left; }
+th, td { border: 1px solid #000; padding: .2em .4em; vertical-align: top; }
+th { font-weight: bold; }
+
+a { word-wrap: break-word; }
