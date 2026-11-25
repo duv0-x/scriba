@@ -239,3 +239,19 @@ func TestDatedLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestGridResponsiveSinMinimoIntrinseco(t *testing.T) {
+	_, css := get(t, newServer(t), "/static/app.css", nil)
+	compact := strings.Join(strings.Fields(css), "")
+	for _, want := range []string{
+		`.reader{grid-template-columns:minmax(0,1fr);padding:28px20px60px}`,
+		`grid-template-columns:minmax(0,1fr)minmax(0,1fr);`,
+		`.split{grid-template-columns:minmax(0,1fr)}`,
+		`grid-template-columns:minmax(0,1.4fr)minmax(0,1fr);`,
+		`.grid2{grid-template-columns:minmax(0,1fr)}`,
+	} {
+		if !strings.Contains(compact, want) {
+			t.Errorf("app.css sin %q", want)
+		}
+	}
+}

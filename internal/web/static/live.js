@@ -31,18 +31,23 @@
   let run = 0;
   function play(prose) {
     const id = ++run;
+    const done = () => window.htmx?.process(prose);
     const nodes = [];
     prose.querySelectorAll(".chg").forEach((c) => {
       const w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
       while (w.nextNode()) nodes.push({ n: w.currentNode, t: w.currentNode.data });
     });
-    if (still.matches || !nodes.length) return;
+    if (still.matches || !nodes.length) return done();
     nodes.forEach((x) => (x.n.data = ""));
     const caret = document.createElement("span");
     caret.className = "caret";
     let i = 0, k = 0;
     const step = () => {
-      if (id !== run) return nodes.slice(i).forEach((x) => (x.n.data = x.t));
+      if (id !== run) {
+        nodes.slice(i).forEach((x) => (x.n.data = x.t));
+        done();
+        return;
+      }
       let budget = 2 + Math.floor(Math.random() * 3);
       while (budget > 0 && i < nodes.length) {
         const x = nodes[i], take = Math.min(budget, x.t.length - k);
@@ -53,7 +58,10 @@
         if (k >= x.t.length) i++, k = 0;
       }
       if (i < nodes.length) requestAnimationFrame(step);
-      else caret.remove();
+      else {
+        caret.remove();
+        done();
+      }
     };
     requestAnimationFrame(step);
   }
@@ -63,13 +71,17 @@
     if (busy) return void (again = true);
     busy = true;
     try {
-      const res = await fetch(location.pathname + "?fragmento=1", { headers: { Accept: "text/html" } });
+      const path = location.pathname;
+      const res = await fetch(path + "?fragmento=1", { headers: { Accept: "text/html" } });
+      if (!res.ok) return;
+      const html = await res.text();
+      if (path !== location.pathname) return;
       const prose = document.querySelector(".prose");
-      if (res.ok && prose) {
-        run++; // corta la reproducción anterior antes de reemplazar el DOM
-        prose.innerHTML = await res.text();
-        play(prose);
-      }
+      if (!prose) return;
+      run++; // corta la reproducción anterior antes de reemplazar el DOM
+      prose.innerHTML = html;
+      window.htmx?.process(prose);
+      play(prose);
     } catch (_) {
       // sin red: el próximo evento lo vuelve a intentar
     } finally {

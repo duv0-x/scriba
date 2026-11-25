@@ -956,7 +956,7 @@
 
   @media (max-width: 1000px) {
     .reader {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       padding: 28px 20px 60px;
     }
     .aside {
@@ -1053,7 +1053,7 @@
   .split {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     min-height: 0;
   }
   .pane {
@@ -1090,7 +1090,7 @@
   }
   @media (max-width: 1000px) {
     .split {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     .pane + .pane {
       border-left: 0;
@@ -1222,7 +1222,7 @@
   }
   .grid2 {
     display: grid;
-    grid-template-columns: 1.4fr 1fr;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
     gap: 12px;
     align-items: start;
   }
@@ -1347,7 +1347,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .grid2 {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 

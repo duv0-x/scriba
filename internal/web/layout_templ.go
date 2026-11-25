@@ -170,7 +170,7 @@ func layout(sh shell, title string, content templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</main></div></div><script>\n\t\t\t\t// ⌘K / Ctrl+K enfoca la búsqueda; Escape o un clic fuera cierran los resultados.\n\t\t\t\t(() => {\n\t\t\t\t\tconst q = document.getElementById(\"q\"), res = document.getElementById(\"resultados\");\n\t\t\t\t\tdocument.addEventListener(\"keydown\", (e) => {\n\t\t\t\t\t\tif ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === \"k\") { e.preventDefault(); q.focus(); q.select(); }\n\t\t\t\t\t\telse if (e.key === \"Escape\" && res.innerHTML) { res.innerHTML = \"\"; q.focus(); }\n\t\t\t\t\t});\n\t\t\t\t\tdocument.addEventListener(\"click\", (e) => { if (!e.target.closest(\".search\")) res.innerHTML = \"\"; });\n\t\t\t\t\t// Navegación parcial (ADR-009): solo cambia .view; la sidebar se ajusta a la vista nueva.\n\t\t\t\t\t// Una respuesta sin .view (error en texto plano, JSON, estático) vaciaría la vista: recarga completa.\n\t\t\t\t\tdocument.addEventListener(\"htmx:before:swap\", (e) => {\n\t\t\t\t\t\tconst ctx = e.detail.ctx;\n\t\t\t\t\t\tif (!ctx.sourceElement?._htmx?.boosted || /<main[^>]*class=\"view\"/.test(ctx.text || \"\")) return;\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tlocation.href = ctx.request.action;\n\t\t\t\t\t});\n\t\t\t\t\tlet restored = false;\n\t\t\t\t\tdocument.addEventListener(\"htmx:before:history:restore\", () => { restored = true; });\n\t\t\t\t\tdocument.addEventListener(\"htmx:after:settle\", (e) => {\n\t\t\t\t\t\tif (!e.target.matches?.(\".view\")) return; // la búsqueda en vivo también dispara settle\n\t\t\t\t\t\tconst v = document.querySelector(\".view\"), cur = v.dataset.current, view = v.dataset.view;\n\t\t\t\t\t\tif (restored) v.scrollTop = 0; // atrás/adelante reusan el mismo .view (outerSync) con su scroll\n\t\t\t\t\t\trestored = false;\n\t\t\t\t\t\tif (!document.querySelector(\".reader\")) window.scribaLector?.abort();\n\t\t\t\t\t\t// El enlace pulsado pudo salir del DOM: el foco va a la vista nueva para que el lector de pantalla la lea.\n\t\t\t\t\t\tconst f = document.activeElement;\n\t\t\t\t\t\tif (!f || f === document.body || !f.isConnected) v.focus({ preventScroll: true });\n\t\t\t\t\t\tres.innerHTML = \"\";\n\t\t\t\t\t\tdocument.querySelectorAll(\".tree a[aria-current]\").forEach((a) => a.removeAttribute(\"aria-current\"));\n\t\t\t\t\t\tdocument.querySelectorAll(\".nav a\").forEach((a) => a.classList.toggle(\"on\", !cur && a.dataset.v === view));\n\t\t\t\t\t\tconst a = cur && document.querySelector(`.tree a[data-path=\"${CSS.escape(cur)}\"]`);\n\t\t\t\t\t\tif (!a) return;\n\t\t\t\t\t\ta.setAttribute(\"aria-current\", \"page\");\n\t\t\t\t\t\ta.classList.remove(\"unread\");\n\t\t\t\t\t\tfor (let d = a.closest(\"details\"); d; d = d.parentElement.closest(\"details\")) d.open = true;\n\t\t\t\t\t});\n\t\t\t\t})();\n\t\t\t</script></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</main></div></div><script>\n\t\t\t\t// ⌘K / Ctrl+K enfoca la búsqueda; Escape o un clic fuera cierran los resultados.\n\t\t\t\t(() => {\n\t\t\t\t\tconst q = document.getElementById(\"q\"), res = document.getElementById(\"resultados\");\n\t\t\t\t\tdocument.addEventListener(\"keydown\", (e) => {\n\t\t\t\t\t\tif ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === \"k\") { e.preventDefault(); q.focus(); q.select(); }\n\t\t\t\t\t\telse if (e.key === \"Escape\" && res.innerHTML) { res.innerHTML = \"\"; q.focus(); }\n\t\t\t\t\t});\n\t\t\t\t\tdocument.addEventListener(\"click\", (e) => { if (!e.target.closest(\".search\")) res.innerHTML = \"\"; });\n\t\t\t\t\t// Navegación parcial (ADR-009): solo cambia .view; la sidebar se ajusta a la vista nueva.\n\t\t\t\t\t// Una respuesta sin .view (error en texto plano, JSON, estático) vaciaría la vista: recarga completa.\n\t\t\t\t\tdocument.addEventListener(\"htmx:before:swap\", (e) => {\n\t\t\t\t\t\tconst ctx = e.detail.ctx;\n\t\t\t\t\t\tif (!ctx.sourceElement?._htmx?.boosted || /<main[^>]*class=\"view\"/.test(ctx.text || \"\")) return;\n\t\t\t\t\t\te.preventDefault();\n\t\t\t\t\t\tlocation.href = ctx.request.action;\n\t\t\t\t\t});\n\t\t\t\t\tlet restored = false;\n\t\t\t\t\tdocument.addEventListener(\"htmx:before:history:restore\", () => { restored = true; });\n\t\t\t\t\tdocument.addEventListener(\"htmx:after:settle\", (e) => {\n\t\t\t\t\t\tif (!e.target.matches?.(\".view\")) return; // la búsqueda en vivo también dispara settle\n\t\t\t\t\t\tconst v = document.querySelector(\".view\"), cur = v.dataset.current, view = v.dataset.view;\n\t\t\t\t\t\tif (restored) v.scrollTop = 0; // atrás/adelante reusan el mismo .view (outerSync) con su scroll\n\t\t\t\t\t\trestored = false;\n\t\t\t\t\t\tif (!document.querySelector(\".reader\")) window.scribaLector?.abort();\n\t\t\t\t\t\t// El enlace pulsado pudo salir del DOM: el foco va a la vista nueva para que el lector de pantalla la lea.\n\t\t\t\t\t\tres.innerHTML = \"\";\n\t\t\t\t\t\tq.value = \"\";\n\t\t\t\t\t\tconst f = document.activeElement;\n\t\t\t\t\t\tif (!f || f === document.body || !f.isConnected) v.focus({ preventScroll: true });\n\t\t\t\t\t\tdocument.querySelectorAll(\".tree a[aria-current]\").forEach((a) => a.removeAttribute(\"aria-current\"));\n\t\t\t\t\t\tdocument.querySelectorAll(\".nav a\").forEach((a) => a.classList.toggle(\"on\", !cur && a.dataset.v === view));\n\t\t\t\t\t\tconst a = cur && document.querySelector(`.tree a[data-path=\"${CSS.escape(cur)}\"]`);\n\t\t\t\t\t\tif (!a) return;\n\t\t\t\t\t\ta.setAttribute(\"aria-current\", \"page\");\n\t\t\t\t\t\ta.classList.remove(\"unread\");\n\t\t\t\t\t\tfor (let d = a.closest(\"details\"); d; d = d.parentElement.closest(\"details\")) d.open = true;\n\t\t\t\t\t});\n\t\t\t\t})();\n\t\t\t</script></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -390,7 +390,7 @@ func treeList(nodes []treeNode) templ.Component {
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(n.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 146, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 147, Col: 27}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 				if templ_7745c5c3_Err != nil {
@@ -403,7 +403,7 @@ func treeList(nodes []treeNode) templ.Component {
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(n.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 146, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 147, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 				if templ_7745c5c3_Err != nil {
@@ -416,7 +416,7 @@ func treeList(nodes []treeNode) templ.Component {
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(n.N))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 146, Col: 101}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 147, Col: 101}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 				if templ_7745c5c3_Err != nil {
@@ -447,7 +447,7 @@ func treeList(nodes []treeNode) templ.Component {
 				var templ_7745c5c3_Var24 templ.SafeURL
 				templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(noteHref(n.Path))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 153, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 154, Col: 27}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 				if templ_7745c5c3_Err != nil {
@@ -460,7 +460,7 @@ func treeList(nodes []treeNode) templ.Component {
 				var templ_7745c5c3_Var25 string
 				templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(n.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 154, Col: 22}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 155, Col: 22}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 				if templ_7745c5c3_Err != nil {
@@ -502,7 +502,7 @@ func treeList(nodes []treeNode) templ.Component {
 				var templ_7745c5c3_Var27 string
 				templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(n.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 161, Col: 18}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 162, Col: 18}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 				if templ_7745c5c3_Err != nil {
@@ -515,7 +515,7 @@ func treeList(nodes []treeNode) templ.Component {
 				var templ_7745c5c3_Var28 string
 				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(n.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 162, Col: 13}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 163, Col: 13}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 				if templ_7745c5c3_Err != nil {
