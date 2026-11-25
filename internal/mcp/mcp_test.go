@@ -158,7 +158,11 @@ func TestUnauthorized(t *testing.T) {
 			defer resp.Body.Close()
 			var body map[string]string
 			json.NewDecoder(resp.Body).Decode(&body)
-			if resp.StatusCode != 401 || resp.Header.Get("WWW-Authenticate") != "Bearer" || body["error"] != "token inválido" {
+			want := `Bearer resource_metadata="http://scriba.test/.well-known/oauth-protected-resource/mcp"`
+			if name == "token malo" {
+				want += `, error="invalid_token"`
+			}
+			if resp.StatusCode != 401 || resp.Header.Get("WWW-Authenticate") != want || body["error"] != "token inválido" {
 				t.Fatalf("status %d, www-auth %q, body %v", resp.StatusCode, resp.Header.Get("WWW-Authenticate"), body)
 			}
 		})

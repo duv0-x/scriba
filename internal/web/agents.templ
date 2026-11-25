@@ -45,8 +45,13 @@ templ agentsPage(v agentsView) {
 								<td>
 									if t.Revoked {
 										<span class="pill">revocado</span>
+									} else if t.Expired() {
+										<span class="pill">expirado</span>
 									} else {
 										<span class="pill ok">activo</span>
+									}
+									if t.ClientID != "" {
+										<span class="pill">conector</span>
 									}
 								</td>
 								<td>

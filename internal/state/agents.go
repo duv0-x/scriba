@@ -16,7 +16,13 @@ type AgentToken struct {
 	Hash              []byte
 	Created, LastUsed time.Time
 	Revoked           bool
+	ClientID          string    // "" = token estático; con valor = concesión OAuth (ADR-010)
+	Expires           time.Time // del access token; cero = no expira
+	RefreshExpires    time.Time // solo lo rellena ListAgentTokens
 }
+
+// Expired dice si una concesión OAuth ya no se puede renovar.
+func (a AgentToken) Expired() bool { return a.ClientID != "" && !time.Now().Before(a.RefreshExpires) }
 
 // Activity es una acción de un agente sobre una nota.
 type Activity struct {
@@ -32,15 +38,15 @@ func unixNano(n int64) time.Time {
 	return time.Unix(0, n)
 }
 
-// InsertAgentToken guarda un token nuevo. Un nombre solo se reutiliza si el token
-// anterior está revocado (se borra); si sigue activo devuelve ErrNameTaken.
+// InsertAgentToken guarda un token nuevo. Un nombre solo se reutiliza si el token anterior
+// está revocado o es una concesión OAuth caducada (se borra); si no, devuelve ErrNameTaken.
 func (s *Store) InsertAgentToken(name string, hash []byte, created time.Time) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec("DELETE FROM agent_tokens WHERE name = ? AND revoked = 1", name); err != nil {
+	if _, err := tx.Exec("DELETE FROM agent_tokens WHERE name = ? AND (revoked = 1 OR (client_id != '' AND refresh_expires <= ?))", name, created.UnixNano()); err != nil {
 		return err
 	}
 	var n int
@@ -59,22 +65,22 @@ func (s *Store) InsertAgentToken(name string, hash []byte, created time.Time) er
 // AgentByHash busca el token por su hash (revocado o no) y dice si existe.
 func (s *Store) AgentByHash(hash []byte) (AgentToken, bool, error) {
 	var a AgentToken
-	var created, used int64
-	err := s.db.QueryRow("SELECT id, name, hash, created, last_used, revoked FROM agent_tokens WHERE hash = ?", hash).
-		Scan(&a.ID, &a.Name, &a.Hash, &created, &used, &a.Revoked)
+	var created, used, expires int64
+	err := s.db.QueryRow("SELECT id, name, hash, created, last_used, revoked, client_id, expires FROM agent_tokens WHERE hash = ?", hash).
+		Scan(&a.ID, &a.Name, &a.Hash, &created, &used, &a.Revoked, &a.ClientID, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AgentToken{}, false, nil
 	}
 	if err != nil {
 		return AgentToken{}, false, err
 	}
-	a.Created, a.LastUsed = unixNano(created), unixNano(used)
+	a.Created, a.LastUsed, a.Expires = unixNano(created), unixNano(used), unixNano(expires)
 	return a, true, nil
 }
 
 // ListAgentTokens devuelve todos los tokens, el más reciente primero, sin hashes.
 func (s *Store) ListAgentTokens() ([]AgentToken, error) {
-	rows, err := s.db.Query("SELECT id, name, created, last_used, revoked FROM agent_tokens ORDER BY created DESC, id DESC")
+	rows, err := s.db.Query("SELECT id, name, created, last_used, revoked, client_id, refresh_expires FROM agent_tokens ORDER BY created DESC, id DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +88,11 @@ func (s *Store) ListAgentTokens() ([]AgentToken, error) {
 	var out []AgentToken
 	for rows.Next() {
 		var a AgentToken
-		var created, used int64
-		if err := rows.Scan(&a.ID, &a.Name, &created, &used, &a.Revoked); err != nil {
+		var created, used, refresh int64
+		if err := rows.Scan(&a.ID, &a.Name, &created, &used, &a.Revoked, &a.ClientID, &refresh); err != nil {
 			return nil, err
 		}
-		a.Created, a.LastUsed = unixNano(created), unixNano(used)
+		a.Created, a.LastUsed, a.RefreshExpires = unixNano(created), unixNano(used), unixNano(refresh)
 		out = append(out, a)
 	}
 	return out, rows.Err()

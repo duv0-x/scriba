@@ -22,6 +22,7 @@ import (
 	"github.com/duv0-x/scriba/internal/agents"
 	"github.com/duv0-x/scriba/internal/events"
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/oauth"
 	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
 	"github.com/duv0-x/scriba/internal/writer"
@@ -43,6 +44,7 @@ type Server struct {
 	OnImported func()        // tras crear/importar el vault (reindexar); puede ser nil
 	Agents     *agents.Store // nil = sin pantalla de agentes
 	PublicURL  string        // base para el comando de Claude Code; "" = host de la petición
+	OAuth      *oauth.Server // consentimiento de conectores (ADR-010); nil = sin OAuth
 	// PR3b: pueden ser nil (sin tiempo real, sin editor).
 	Bus      *events.Bus      // cambios de notas (agentes y disco)
 	Presence *events.Presence // qué agente está escribiendo qué nota
@@ -79,6 +81,9 @@ func (s *Server) Handler() http.Handler {
 	s.setupRoutes(mux)
 	if s.Agents != nil {
 		s.agentRoutes(mux)
+		if s.OAuth != nil {
+			s.oauthRoutes(mux)
+		}
 	}
 	return sameOrigin(s.gate(mux))
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/duv0-x/scriba/internal/gitvault"
 	"github.com/duv0-x/scriba/internal/index"
 	"github.com/duv0-x/scriba/internal/mcp"
+	"github.com/duv0-x/scriba/internal/oauth"
 	"github.com/duv0-x/scriba/internal/secrets"
 	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
@@ -162,11 +163,17 @@ func runServe(ctx context.Context, o serveOpts) error {
 		}
 	}
 	ag := &agents.Store{S: st}
+	// OAuth para conectores (ADR-010): las rutas públicas van aquí; el consentimiento, en la web.
+	az, err := oauth.New(key, ag, o.publicURL)
+	if err != nil {
+		return err
+	}
 
 	mux := http.NewServeMux()
+	az.Register(mux)
 	mux.Handle("/mcp", mcp.Handler(mcp.Config{V: v, Ix: ix, W: wr, Agents: ag, PublicURL: o.publicURL, Version: version}))
 	mux.Handle("/", (&web.Server{
-		V: v, Ix: ix, State: st, Key: key, Agents: ag, PublicURL: o.publicURL,
+		V: v, Ix: ix, State: st, Key: key, Agents: ag, OAuth: az, PublicURL: o.publicURL,
 		Bus: bus, Presence: presence, W: wr,
 		GitHub: github.New(), Git: web.GitVault{}, ClientID: clientID,
 		OnImported: func() {

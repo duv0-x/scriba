@@ -31,7 +31,14 @@ sudo systemctl enable --now scriba scriba-update.timer
 
 `scriba-update` instala la última release cada 5 minutos, con verificación del checksum, respaldo del binario y de `state.db`, y rollback si `/readyz` no responde. Una versión que no queda lista se anota en `/scriba/.failed` y no se reintenta hasta que cambie la versión. Para fijar la versión estilo GitOps, define `SCRIBA_VERSION_URL` en `/scriba/scriba-update.env`, apuntando a un archivo con el tag (p. ej. el `scriba.version` del repo de tu instancia). Si cambias el puerto de `SCRIBA_LISTEN`, pon también `SCRIBA_READY_URL=http://127.0.0.1:<puerto>/readyz` en ese archivo: el updater espera `/readyz` en 8090. Ver [ADR-008](docs/adr/ADR-008-release-y-despliegue.md).
 
-Pon la web detrás de un proxy con autenticación (Scriba usa Cloudflare Access) y deja `/mcp` fuera de ella: los agentes se autentican con su token.
+Pon la web detrás de un proxy con autenticación (Scriba usa Cloudflare Access) y deja fuera de ella **solo** estas rutas, que Scriba protege por sí mismo:
+
+- `/mcp`
+- `/.well-known/oauth-protected-resource` y `/.well-known/oauth-protected-resource/mcp`
+- `/.well-known/oauth-authorization-server`
+- `/oauth/register` y `/oauth/token`
+
+`/oauth/authorize` tiene que quedar **detrás** del proxy: quien llegue a esa pantalla puede emitir un token. No abras `/oauth/*` entero.
 
 ## Conectar GitHub
 
@@ -60,6 +67,15 @@ Los agentes leen y escriben por MCP en `/mcp`. Cada agente usa su propio token:
 Mientras un agente escribe, la web lo muestra en vivo: el badge "<agente> editando <nota>", un punto en Folios y, si tienes la nota abierta, los bloques nuevos aparecen con efecto de escritura. Al abrir una nota ves resaltado lo que cambió desde tu última lectura (por persona: el correo de Cloudflare Access, o `default` en local). Las notas también se pueden editar desde la web; si un agente la cambió mientras editabas, Scriba no sobrescribe y te muestra el conflicto.
 
 Cada escritura queda como un commit con el agente como autor (`claude-code-mac via Scriba`). Si GitHub está conectado con push automático, los commits se empujan cada 30 s. Ver [ADR-007](docs/adr/ADR-007-mcp-y-tokens-de-agente.md).
+
+## Conectar Claude (web, Desktop y móvil)
+
+Los conectores personalizados de Claude usan OAuth, sin tokens a mano:
+
+1. En Claude, **Settings → Connectors → Add custom connector**, con la URL `https://<tu-instancia>/mcp`.
+2. Scriba abre **Autorizar conector** (detrás de tu proxy de autenticación). Elige el nombre del agente y aprueba.
+
+El conector aparece en **Agentes** y se revoca ahí. El access token dura 1 hora y se renueva solo; tras 90 días sin uso hay que reconectar. La instancia necesita HTTPS público. Ver [ADR-010](docs/adr/ADR-010-oauth-conectores.md).
 
 ## Plugin de Claude Code
 

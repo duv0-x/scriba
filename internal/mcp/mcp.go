@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/oauth"
 	"github.com/duv0-x/scriba/internal/vault"
 	"github.com/duv0-x/scriba/internal/writer"
 )
@@ -48,24 +48,8 @@ type agentKey struct{}
 // baseKey es la clave de TokenInfo.Extra con la base de las URLs de la petición.
 const baseKey = "base"
 
-// hostOK limita el Host a los caracteres de un nombre, IPv4/IPv6 y puerto: no se puede
-// inyectar ruta, query ni HTML en las URLs devueltas.
-var hostOK = regexp.MustCompile(`^[A-Za-z0-9.:\-\[\]]+$`)
-
 // baseURL es la base de las URLs devueltas: PublicURL o, si falta, la deducida de la petición.
-func (cfg Config) baseURL(r *http.Request) string {
-	if cfg.PublicURL != "" {
-		return cfg.PublicURL
-	}
-	if !hostOK.MatchString(r.Host) {
-		return "http://127.0.0.1"
-	}
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host
-}
+func (cfg Config) baseURL(r *http.Request) string { return oauth.BaseURL(cfg.PublicURL, r) }
 
 // Handler devuelve el endpoint MCP: sin un Bearer válido responde 401 sin llegar al SDK.
 func Handler(cfg Config) http.Handler {
@@ -90,11 +74,17 @@ func Handler(cfg Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 		name, ok := "", false
-		if strings.EqualFold(scheme, "Bearer") && token != "" {
+		presented := strings.EqualFold(scheme, "Bearer") && token != ""
+		if presented {
 			name, ok = cfg.Agents.Verify(strings.TrimSpace(token))
 		}
 		if !ok {
-			w.Header().Set("WWW-Authenticate", "Bearer")
+			// RFC 9728: el 401 dice dónde descubrir el authorization server (ADR-010).
+			challenge := fmt.Sprintf("Bearer resource_metadata=%q", oauth.ResourceMetadataURL(cfg.baseURL(r)))
+			if presented {
+				challenge += `, error="invalid_token"`
+			}
+			w.Header().Set("WWW-Authenticate", challenge)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"token inválido"}`))

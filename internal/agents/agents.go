@@ -77,7 +77,8 @@ func (s Store) Verify(token string) (string, bool) {
 	}
 	h := Hash(token)
 	a, ok, err := s.S.AgentByHash(h)
-	if err != nil || !ok || subtle.ConstantTimeCompare(a.Hash, h) != 1 || a.Revoked {
+	if err != nil || !ok || subtle.ConstantTimeCompare(a.Hash, h) != 1 || a.Revoked ||
+		(!a.Expires.IsZero() && !time.Now().Before(a.Expires)) {
 		return "", false
 	}
 	// last_used con resolución de un minuto: evita una escritura por petición.
