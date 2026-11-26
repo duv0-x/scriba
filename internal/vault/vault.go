@@ -116,6 +116,30 @@ func (v *Vault) Walk(fn func(rel string) error) error {
 	})
 }
 
+// Template devuelve el contenido de la plantilla _templates/<name>, de solo lectura:
+// name es un único archivo .md, sin subcarpetas ni ocultos, y no puede salir de _templates.
+func (v *Vault) Template(name string) (string, error) {
+	if name != filepath.Base(name) || strings.ContainsAny(name, `/\`) || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".md") {
+		return "", ErrOutside
+	}
+	dir, err := filepath.EvalSymlinks(filepath.Join(v.Root, "_templates"))
+	if err != nil {
+		return "", fmt.Errorf("vault: %w", err)
+	}
+	abs, err := filepath.EvalSymlinks(filepath.Join(dir, name))
+	if err != nil {
+		return "", fmt.Errorf("vault: %w", err)
+	}
+	if filepath.Dir(abs) != dir {
+		return "", ErrOutside
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", fmt.Errorf("vault: %w", err)
+	}
+	return string(data), nil
+}
+
 // Read lee y parsea la nota rel.
 func (v *Vault) Read(rel string) (*Note, error) {
 	abs, err := v.Abs(rel)
