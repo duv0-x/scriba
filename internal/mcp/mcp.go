@@ -202,8 +202,15 @@ func newServer(cfg Config) *sdk.Server {
 		})
 
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_read",
-		Description: "Lee una nota completa (frontmatter incluido) con sus metadatos (título, tipo, fecha, tags) y las rutas de las notas que la enlazan."},
+		Description: "Lee una nota completa (frontmatter incluido) con sus metadatos (título, tipo, fecha, tags) y las rutas de las notas que la enlazan. También lee las plantillas de solo lectura: _templates/ticket.md, adr.md, runbook.md y postmortem.md."},
 		func(_ context.Context, _ *sdk.CallToolRequest, in pathIn) (*sdk.CallToolResult, readOut, error) {
+			if name, ok := strings.CutPrefix(in.Path, "_templates/"); ok {
+				c, err := cfg.V.Template(name)
+				if err != nil {
+					return nil, readOut{}, humanErr(in.Path, err)
+				}
+				return nil, readOut{Path: in.Path, Content: c, Tags: []string{}, Backlinks: []string{}}, nil
+			}
 			abs, err := cfg.noteAbs(in.Path)
 			if err != nil {
 				return nil, readOut{}, err

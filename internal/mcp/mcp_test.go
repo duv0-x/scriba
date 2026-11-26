@@ -387,3 +387,29 @@ func TestRevokedMidSession(t *testing.T) {
 	}
 	e.assertNoWrite(t)
 }
+
+func TestReadTemplate(t *testing.T) {
+	e := setup(t, "http://scriba.test/")
+	cs := e.connect(t, "tok-a")
+	tpl := filepath.Join(e.root, "_templates")
+	if err := os.MkdirAll(filepath.Join(tpl, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(tpl, "adr.md"), []byte("# ADR-NNN\n"), 0o644)
+	os.WriteFile(filepath.Join(tpl, "sub", "x.md"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(e.root, "fuera.md"), []byte("secreto"), 0o644)
+	os.Symlink(filepath.Join(e.root, "fuera.md"), filepath.Join(tpl, "link.md"))
+
+	var rd readOut
+	if r := call(t, cs, "kb_read", map[string]any{"path": "_templates/adr.md"}, &rd); r.IsError || rd.Content != "# ADR-NNN\n" {
+		t.Fatalf("kb_read plantilla: %+v %s", rd, text(r))
+	}
+	for _, p := range []string{"_templates/sub/x.md", "_templates/../fuera.md", "_templates/.oculto.md", "_templates/link.md", "_templates/no.md", "_templates/adr.txt"} {
+		if r := call(t, cs, "kb_read", map[string]any{"path": p}, nil); !r.IsError {
+			t.Fatalf("kb_read %s debería fallar", p)
+		}
+	}
+	if r := call(t, cs, "kb_write", map[string]any{"path": "_templates/adr.md", "content": "x"}, nil); !r.IsError {
+		t.Fatal("kb_write en _templates debería fallar")
+	}
+}
