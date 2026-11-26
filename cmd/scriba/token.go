@@ -49,7 +49,7 @@ func tokenCmd(args []string, stdout, stderr io.Writer) int {
 	// No se crea la base: un --data equivocado dejaría tokens en una state.db que nadie lee.
 	dbPath := filepath.Join(*data, "state.db")
 	if _, err := os.Stat(dbPath); err != nil {
-		fmt.Fprintf(stderr, "error: no hay state.db en %s: pasa --data con el directorio de datos de tu instancia (junto a scriba.db)\n", *data)
+		fmt.Fprintf(stderr, "error: no hay state.db en %s: pasa --data con el directorio de datos de tu instancia (el mismo --data de scriba serve)\n", *data)
 		return 1
 	}
 	st, err := state.Open(dbPath)

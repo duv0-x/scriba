@@ -12,7 +12,7 @@ var version = "dev"
 const usage = `uso: scriba <comando> [flags]
 
 comandos:
-  serve    sirve el vault (--vault <dir> obligatorio)
+  serve    sirve las bases de conocimiento (--data <dir> obligatorio)
   token    crea, lista o revoca tokens de agente (create|list|revoke)
   view     muestra una nota en la terminal (--vault <dir> obligatorio; --follow repinta)
   version  imprime la versión

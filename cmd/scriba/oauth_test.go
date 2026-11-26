@@ -34,7 +34,7 @@ func TestConectorOAuthDePuntaAPunta(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	done := make(chan error, 1)
 	go func() {
-		done <- runServe(ctx, serveOpts{vault: root, db: filepath.Join(dir, "scriba.db"), clientID: "x", tz: "UTC", ln: ln})
+		done <- runServe(ctx, serveOpts{data: dir, clientID: "x", tz: "UTC", ln: ln})
 	}()
 	t.Cleanup(func() { cancel(); <-done })
 	base := "http://" + ln.Addr().String()

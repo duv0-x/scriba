@@ -69,7 +69,7 @@ func TestDesconectarDuranteClone(t *testing.T) {
 	if !strings.Contains(out, "se desconectó durante la importación") {
 		t.Errorf("respuesta del import:\n%s", out)
 	}
-	if _, ok, _ := e.srv.State.Connector("github"); ok {
+	if _, ok, _ := e.srv.State.KBConnector("github", e.srv.KB); ok {
 		t.Fatal("el conector reapareció tras desconectar")
 	}
 	if !e.srv.vaultEmpty() || e.imported != 0 {
@@ -102,7 +102,7 @@ func TestEnlazar(t *testing.T) {
 		if res.StatusCode != http.StatusConflict || !strings.Contains(body, "Este vault apunta a https://github.com/otro/repo.git; no se puede enlazar a duv0-x/ia-kb") {
 			t.Fatalf("status %d\n%s", res.StatusCode, body)
 		}
-		if c, _, _ := e.srv.State.Connector("github"); c.Repo != "" || e.git.setRemote != "" {
+		if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "" || e.git.setRemote != "" {
 			t.Errorf("repo %q, setRemote %q", c.Repo, e.git.setRemote)
 		}
 	})
@@ -114,7 +114,7 @@ func TestEnlazar(t *testing.T) {
 		if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil); res.StatusCode != http.StatusSeeOther {
 			t.Fatalf("status %d", res.StatusCode)
 		}
-		if c, _, _ := e.srv.State.Connector("github"); c.Repo != "duv0-x/ia-kb" || e.git.setRemote != "" {
+		if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "duv0-x/ia-kb" || e.git.setRemote != "" {
 			t.Errorf("repo %q, setRemote %q", c.Repo, e.git.setRemote)
 		}
 	})
@@ -128,7 +128,7 @@ func TestEnlazar(t *testing.T) {
 		if e.git.setRemote != "https://github.com/duv0-x/ia-kb.git" {
 			t.Errorf("setRemote %q", e.git.setRemote)
 		}
-		if c, _, _ := e.srv.State.Connector("github"); c.Repo != "duv0-x/ia-kb" || c.Account != "duv0-x" {
+		if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "duv0-x/ia-kb" || c.Account != "duv0-x" {
 			t.Errorf("conector %+v", c)
 		}
 	})

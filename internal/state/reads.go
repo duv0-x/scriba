@@ -13,19 +13,19 @@ type Read struct {
 	At            time.Time
 }
 
-// MarkRead guarda (o reemplaza) la lectura de path por user.
-func (s *Store) MarkRead(user, path, hash, content string, at time.Time) error {
-	_, err := s.db.Exec(`INSERT INTO reads(user, path, hash, content, at) VALUES(?, ?, ?, ?, ?)
-		ON CONFLICT(user, path) DO UPDATE SET hash = excluded.hash, content = excluded.content, at = excluded.at`,
-		user, path, hash, content, at.UnixNano())
+// MarkRead guarda (o reemplaza) la lectura de path por user en una KB.
+func (s *Store) MarkRead(kb, user, path, hash, content string, at time.Time) error {
+	_, err := s.db.Exec(`INSERT INTO reads(kb, user, path, hash, content, at) VALUES(?, ?, ?, ?, ?, ?)
+		ON CONFLICT(kb, user, path) DO UPDATE SET hash = excluded.hash, content = excluded.content, at = excluded.at`,
+		kb, user, path, hash, content, at.UnixNano())
 	return err
 }
 
-// LastRead devuelve la última lectura de path por user y si existe.
-func (s *Store) LastRead(user, path string) (Read, bool, error) {
+// LastRead devuelve la última lectura de path por user en una KB y si existe.
+func (s *Store) LastRead(kb, user, path string) (Read, bool, error) {
 	var r Read
 	var at int64
-	err := s.db.QueryRow("SELECT hash, content, at FROM reads WHERE user = ? AND path = ?", user, path).Scan(&r.Hash, &r.Content, &at)
+	err := s.db.QueryRow("SELECT hash, content, at FROM reads WHERE kb = ? AND user = ? AND path = ?", kb, user, path).Scan(&r.Hash, &r.Content, &at)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Read{}, false, nil
 	}
@@ -36,9 +36,9 @@ func (s *Store) LastRead(user, path string) (Read, bool, error) {
 	return r, true, nil
 }
 
-// ReadHashes devuelve path → hash leído por user, sin traer contenidos.
-func (s *Store) ReadHashes(user string) (map[string]string, error) {
-	rows, err := s.db.Query("SELECT path, hash FROM reads WHERE user = ?", user)
+// ReadHashes devuelve path → hash leído por user en una KB, sin traer contenidos.
+func (s *Store) ReadHashes(kb, user string) (map[string]string, error) {
+	rows, err := s.db.Query("SELECT path, hash FROM reads WHERE kb = ? AND user = ?", kb, user)
 	if err != nil {
 		return nil, err
 	}
@@ -79,9 +79,9 @@ func (s *Store) Baseline(user string, now time.Time) (time.Time, error) {
 	return time.Unix(0, n), nil
 }
 
-// ForgetPath borra las lecturas de path de todos los usuarios (la nota ya no existe).
-func (s *Store) ForgetPath(path string) error {
-	_, err := s.db.Exec("DELETE FROM reads WHERE path = ?", path)
+// ForgetPath borra las lecturas de path de todos los usuarios de una KB (la nota ya no existe).
+func (s *Store) ForgetPath(kb, path string) error {
+	_, err := s.db.Exec("DELETE FROM reads WHERE kb = ? AND path = ?", kb, path)
 	return err
 }
 

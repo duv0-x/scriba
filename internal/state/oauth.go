@@ -32,8 +32,8 @@ func (s *Store) InsertOAuthToken(t OAuthToken) error {
 	if n > 0 {
 		return ErrNameTaken
 	}
-	if _, err := tx.Exec(`INSERT INTO agent_tokens(name, hash, created, client_id, expires, refresh_hash, refresh_expires)
-		VALUES(?, ?, ?, ?, ?, ?, ?)`, t.Name, t.Hash, t.Now.UnixNano(), t.ClientID, t.Expires.UnixNano(),
+	if _, err := tx.Exec(`INSERT INTO agent_tokens(name, hash, created, client_id, expires, refresh_hash, refresh_expires, kb)
+		VALUES(?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT value FROM settings WHERE key = 'default_kb'), ''))`, t.Name, t.Hash, t.Now.UnixNano(), t.ClientID, t.Expires.UnixNano(),
 		t.RefreshHash, t.RefreshExpires.UnixNano()); err != nil {
 		return err
 	}

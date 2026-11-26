@@ -9,6 +9,7 @@ import (
 
 	"github.com/duv0-x/scriba/internal/github"
 	"github.com/duv0-x/scriba/internal/secrets"
+	"github.com/duv0-x/scriba/internal/state"
 )
 
 // connect recorre el device flow hasta dejar el conector guardado.
@@ -51,7 +52,7 @@ func TestDeviceFlow(t *testing.T) {
 	if res.Header.Get("HX-Redirect") != "/conectores" {
 		t.Fatalf("éxito: HX-Redirect = %q", res.Header.Get("HX-Redirect"))
 	}
-	c, ok, err := e.srv.State.Connector("github")
+	c, ok, err := e.srv.State.KBConnector("github", e.srv.KB)
 	if err != nil || !ok || c.Account != "duv0-x" {
 		t.Fatalf("conector = %+v %v %v", c, ok, err)
 	}
@@ -75,7 +76,7 @@ func TestDeviceFlowDenegado(t *testing.T) {
 	if !strings.Contains(body, "Cancelaste") || !strings.Contains(body, "/conectores/github/iniciar") {
 		t.Fatalf("denegado:\n%s", body)
 	}
-	if _, ok, _ := e.srv.State.Connector("github"); ok {
+	if _, ok, _ := e.srv.State.KBConnector("github", e.srv.KB); ok {
 		t.Error("no debe guardar conector")
 	}
 }
@@ -96,7 +97,7 @@ func TestRepoImport(t *testing.T) {
 	if v, _, _ := e.srv.State.Setting("initialized"); v != "1" || e.imported != 1 {
 		t.Fatalf("initialized = %q, OnImported = %d", v, e.imported)
 	}
-	if c, _, _ := e.srv.State.Connector("github"); c.Repo != "duv0-x/ia-kb" {
+	if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "duv0-x/ia-kb" {
 		t.Errorf("repo = %q", c.Repo)
 	}
 	if e.srv.vaultEmpty() {
@@ -104,18 +105,38 @@ func TestRepoImport(t *testing.T) {
 	}
 }
 
+// TestPushPorKB: el repo/push de GitHub es por KB; tocar el de "a" no toca el de "b".
+func TestPushPorKB(t *testing.T) {
+	e := newSetupServer(t)
+	e.srv.KB = "a"
+	for _, kb := range []string{"a", "b"} {
+		if err := e.srv.State.SaveKBConnector(kb, state.Connector{Name: connGitHub, Push: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if res, _ := post(t, e.h, "/conectores/github/push", url.Values{"push": {"0"}}, nil); res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("push = %d", res.StatusCode)
+	}
+	if c, _, _ := e.srv.State.KBConnector(connGitHub, "a"); c.Push {
+		t.Error("push de a sigue activo")
+	}
+	if c, _, _ := e.srv.State.KBConnector(connGitHub, "b"); !c.Push {
+		t.Error("push de b cambió")
+	}
+}
+
 func TestPushYDesconectar(t *testing.T) {
 	e := newSetupServer(t)
 	connect(t, e)
 	post(t, e.h, "/conectores/github/push", url.Values{"push": {"0"}}, nil)
-	if c, _, _ := e.srv.State.Connector("github"); c.Push {
+	if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Push {
 		t.Error("push sigue activo")
 	}
 	res, _ := post(t, e.h, "/conectores/github/desconectar", nil, nil)
 	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/conectores" {
 		t.Fatalf("desconectar = %d", res.StatusCode)
 	}
-	if _, ok, _ := e.srv.State.Connector("github"); ok {
+	if _, ok, _ := e.srv.State.KBConnector("github", e.srv.KB); ok {
 		t.Fatal("el conector sigue guardado")
 	}
 }

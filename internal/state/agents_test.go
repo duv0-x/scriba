@@ -53,15 +53,15 @@ func TestActivity(t *testing.T) {
 	s := open(t, filepath.Join(t.TempDir(), "state.db"))
 	t0 := time.Unix(1700000000, 0)
 	for i, p := range []string{"a.md", "b.md", "c.md"} {
-		if err := s.AddActivity(t0.Add(time.Duration(i)*time.Minute), "claude", "write", p); err != nil {
+		if err := s.AddActivity("a", t0.Add(time.Duration(i)*time.Minute), "claude", "write", p); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got, err := s.Activity(t0.Add(time.Minute), 10)
+	got, err := s.Activity("a", t0.Add(time.Minute), 10)
 	if err != nil || len(got) != 2 || got[0].Path != "c.md" || got[1].Path != "b.md" || !got[0].TS.Equal(t0.Add(2*time.Minute)) {
 		t.Fatalf("Activity = %+v %v", got, err)
 	}
-	if got, _ := s.Activity(t0, 1); len(got) != 1 || got[0].Path != "c.md" {
+	if got, _ := s.Activity("a", t0, 1); len(got) != 1 || got[0].Path != "c.md" {
 		t.Fatalf("limit: %+v", got)
 	}
 }

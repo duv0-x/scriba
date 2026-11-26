@@ -99,7 +99,7 @@ func (s *Server) readView(r *http.Request, n *vault.Note, raw string, res resolv
 	u, now, sum := user(r), time.Now(), hash(raw)
 	var old map[string]bool
 	banner := ""
-	last, ok, err := s.State.LastRead(u, n.Path)
+	last, ok, err := s.State.LastRead(s.KB, u, n.Path)
 	if err != nil {
 		slog.Warn("web: última lectura", "err", err)
 	}
@@ -115,7 +115,7 @@ func (s *Server) readView(r *http.Request, n *vault.Note, raw string, res resolv
 			banner = bannerNew
 		}
 	}
-	if err := s.State.MarkRead(u, n.Path, sum, raw, now); err != nil {
+	if err := s.State.MarkRead(s.KB, u, n.Path, sum, raw, now); err != nil {
 		slog.Warn("web: marcar leída", "err", err)
 	}
 	if old == nil {
@@ -216,7 +216,7 @@ func (s *Server) markTree(r *http.Request, tree []treeNode) {
 	if s.State != nil && len(tree) > 0 {
 		u := user(r)
 		var err error
-		if hashes, err = s.State.ReadHashes(u); err != nil {
+		if hashes, err = s.State.ReadHashes(s.KB, u); err != nil {
 			slog.Warn("web: lecturas", "err", err)
 			hashes = nil
 		} else if base, err = s.State.Baseline(u, time.Now()); err != nil {

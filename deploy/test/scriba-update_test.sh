@@ -21,6 +21,10 @@ case "$url" in
     if grep -q broken "$SCRIBA_DIR/scriba"; then
       # El binario roto alcanzó a migrar el estado y a escribir el índice antes de fallar.
       d="$SCRIBA_DIR/data"
+      # Stub de la migración de ADR-013: si hay layout viejo, lo mueve a kbs/ia-kb.
+      if [ -d "$d/vault" ] && [ ! -e "$d/kbs" ]; then
+        mkdir -p "$d/kbs/ia-kb" && mv "$d/vault" "$d/kbs/ia-kb/vault"
+      fi
       echo "estado v0.2.0" > "$d/state.db"; echo wal > "$d/state.db-wal"
       echo "índice v0.2.0" > "$d/scriba.db"; echo wal > "$d/scriba.db-wal"
       exit 22
@@ -99,5 +103,17 @@ grep -q "binario v0.4.0" "$SCRIBA_DIR/scriba" || fail "no instaló v0.4.0"
 # 4. Un tag inválido se rechaza antes de descargar nada.
 echo 'v1.0.0;rm -rf /' > "$FIXTURES/scriba.version"
 if "$updater" 2>/dev/null; then fail "aceptó un tag inválido"; fi
+
+# 5. Rollback del layout migrado (ADR-013): el vault viejo vuelve a data/vault.
+rm -rf "$SCRIBA_DIR/data"
+mkdir -p "$SCRIBA_DIR/data/vault"
+echo hola > "$SCRIBA_DIR/data/vault/nota.md"
+release v0.5.0 "binario broken v0.5.0"
+echo v0.5.0 > "$FIXTURES/scriba.version"
+if "$updater"; then fail "una versión broken debería devolver error"; fi
+[ -f "$SCRIBA_DIR/data/vault/nota.md" ] || fail "el rollback no restauró data/vault/nota.md"
+[ "$(cat "$SCRIBA_DIR/data/vault/nota.md")" = "hola" ] || fail "el contenido de nota.md no se preservó"
+[ ! -e "$SCRIBA_DIR/data/kbs" ] || fail "el rollback no borró data/kbs"
+grep -q "binario v0.4.0" "$SCRIBA_DIR/scriba" || fail "el rollback no restauró el binario v0.4.0"
 
 echo "scriba-update: ok"
