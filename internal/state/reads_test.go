@@ -8,32 +8,32 @@ import (
 
 func TestReads(t *testing.T) {
 	s := open(t, filepath.Join(t.TempDir(), "state.db"))
-	if _, ok, err := s.LastRead("ana", "a.md"); ok || err != nil {
+	if _, ok, err := s.LastRead("a", "ana", "a.md"); ok || err != nil {
 		t.Fatalf("ausente: ok=%v err=%v", ok, err)
 	}
 	t1 := time.Unix(1700000000, 5)
-	if err := s.MarkRead("ana", "a.md", "h1", "uno", t1); err != nil {
+	if err := s.MarkRead("a", "ana", "a.md", "h1", "uno", t1); err != nil {
 		t.Fatal(err)
 	}
 	t2 := t1.Add(time.Hour)
-	if err := s.MarkRead("ana", "a.md", "h2", "dos", t2); err != nil { // upsert
+	if err := s.MarkRead("a", "ana", "a.md", "h2", "dos", t2); err != nil { // upsert
 		t.Fatal(err)
 	}
-	if err := s.MarkRead("ana", "b.md", "hb", "b", t1); err != nil {
+	if err := s.MarkRead("a", "ana", "b.md", "hb", "b", t1); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkRead("beto", "a.md", "hx", "x", t1); err != nil {
+	if err := s.MarkRead("a", "beto", "a.md", "hx", "x", t1); err != nil {
 		t.Fatal(err)
 	}
-	r, ok, err := s.LastRead("ana", "a.md")
+	r, ok, err := s.LastRead("a", "ana", "a.md")
 	if err != nil || !ok || r.Hash != "h2" || r.Content != "dos" || !r.At.Equal(t2) {
 		t.Fatalf("LastRead = %+v %v %v", r, ok, err)
 	}
-	m, err := s.ReadHashes("ana")
+	m, err := s.ReadHashes("a", "ana")
 	if err != nil || len(m) != 2 || m["a.md"] != "h2" || m["b.md"] != "hb" {
 		t.Fatalf("ReadHashes = %v %v", m, err)
 	}
-	if m, err := s.ReadHashes("nadie"); err != nil || len(m) != 0 {
+	if m, err := s.ReadHashes("a", "nadie"); err != nil || len(m) != 0 {
 		t.Fatalf("ReadHashes(nadie) = %v %v", m, err)
 	}
 }
@@ -81,19 +81,19 @@ func TestForgetPath(t *testing.T) {
 	s := open(t, filepath.Join(t.TempDir(), "state.db"))
 	t1 := time.Unix(1700000000, 0)
 	for _, r := range [][2]string{{"ana", "a.md"}, {"beto", "a.md"}, {"ana", "b.md"}} {
-		if err := s.MarkRead(r[0], r[1], "h", "c", t1); err != nil {
+		if err := s.MarkRead("a", r[0], r[1], "h", "c", t1); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := s.ForgetPath("a.md"); err != nil {
+	if err := s.ForgetPath("a", "a.md"); err != nil {
 		t.Fatal(err)
 	}
 	for _, u := range []string{"ana", "beto"} {
-		if _, ok, err := s.LastRead(u, "a.md"); ok || err != nil {
+		if _, ok, err := s.LastRead("a", u, "a.md"); ok || err != nil {
 			t.Fatalf("%s conserva a.md: %v %v", u, ok, err)
 		}
 	}
-	if _, ok, err := s.LastRead("ana", "b.md"); !ok || err != nil {
+	if _, ok, err := s.LastRead("a", "ana", "b.md"); !ok || err != nil {
 		t.Fatalf("se borró b.md: %v %v", ok, err)
 	}
 }

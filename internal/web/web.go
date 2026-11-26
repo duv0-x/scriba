@@ -35,6 +35,7 @@ var staticFS embed.FS
 type Server struct {
 	V  *vault.Vault
 	Ix *index.Index
+	KB string // slug de la KB que sirve este Server (ADR-013); las lecturas y el repo de GitHub son por KB
 	// PR2: pueden ser nil en los tests del lector; sin State no hay bienvenida ni conectores.
 	State      *state.Store
 	Key        []byte // llave de secrets

@@ -74,6 +74,11 @@ mkdir -p "$PREV"
 [ -f "$DIR/scriba" ] && cp -a "$DIR/scriba" "$PREV/"
 [ -f "$STATE" ] && cp -a "$STATE" "$PREV/"
 [ -f "$STATE-wal" ] && cp -a "$STATE-wal" "$PREV/"
+# Layout de un solo vault (anterior a ADR-013): si la versión nueva lo migra a data/kbs/ y no queda
+# lista, el rollback lo devuelve para que el binario anterior lo encuentre.
+if [ -d "$DIR/data/vault" ] && [ ! -e "$DIR/data/kbs" ]; then
+  touch "$PREV/layout-vault"
+fi
 install -m 0755 -o root -g root "$tmp/new/scriba" "$DIR/scriba"
 systemctl start scriba
 
@@ -95,6 +100,18 @@ if [ -f "$PREV/state.db" ]; then
   install -m 0600 -o "$SVC_USER" -g "$SVC_USER" "$PREV/state.db" "$STATE"
   if [ -f "$PREV/state.db-wal" ]; then
     install -m 0600 -o "$SVC_USER" -g "$SVC_USER" "$PREV/state.db-wal" "$STATE-wal"
+  fi
+fi
+# Devuelve el vault migrado a data/vault (ADR-013): solo si había layout viejo y quedó una sola base.
+if [ -f "$PREV/layout-vault" ] && [ ! -e "$DIR/data/vault" ]; then
+  shopt -s nullglob
+  moved=("$DIR"/data/kbs/*/vault "$DIR"/data/.kbs-migrating/*/vault)
+  shopt -u nullglob
+  if [ ${#moved[@]} -eq 1 ]; then
+    mv "${moved[0]}" "$DIR/data/vault"
+    rm -rf "$DIR/data/kbs" "$DIR/data/.kbs-migrating"
+  else
+    echo "no se restauró data/vault: hay ${#moved[@]} bases migradas" >&2
   fi
 fi
 # El binario anterior reconstruye el índice desde el vault: una migración nueva del índice no bloquea el rollback.

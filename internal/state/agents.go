@@ -56,7 +56,7 @@ func (s *Store) InsertAgentToken(name string, hash []byte, created time.Time) er
 	if n > 0 {
 		return ErrNameTaken
 	}
-	if _, err := tx.Exec("INSERT INTO agent_tokens(name, hash, created) VALUES(?, ?, ?)", name, hash, created.UnixNano()); err != nil {
+	if _, err := tx.Exec("INSERT INTO agent_tokens(name, hash, created, kb) VALUES(?, ?, ?, COALESCE((SELECT value FROM settings WHERE key = 'default_kb'), ''))", name, hash, created.UnixNano()); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -113,14 +113,14 @@ func (s *Store) TouchAgentToken(id int64, t time.Time) error {
 	return err
 }
 
-func (s *Store) AddActivity(ts time.Time, agent, action, path string) error {
-	_, err := s.db.Exec("INSERT INTO activity(ts, agent, action, path) VALUES(?, ?, ?, ?)", ts.UnixNano(), agent, action, path)
+func (s *Store) AddActivity(kb string, ts time.Time, agent, action, path string) error {
+	_, err := s.db.Exec("INSERT INTO activity(kb, ts, agent, action, path) VALUES(?, ?, ?, ?, ?)", kb, ts.UnixNano(), agent, action, path)
 	return err
 }
 
 // Activity devuelve hasta limit acciones desde since (incluida), la más reciente primero.
-func (s *Store) Activity(since time.Time, limit int) ([]Activity, error) {
-	rows, err := s.db.Query("SELECT ts, agent, action, path FROM activity WHERE ts >= ? ORDER BY ts DESC, id DESC LIMIT ?", since.UnixNano(), limit)
+func (s *Store) Activity(kb string, since time.Time, limit int) ([]Activity, error) {
+	rows, err := s.db.Query("SELECT ts, agent, action, path FROM activity WHERE kb = ? AND ts >= ? ORDER BY ts DESC, id DESC LIMIT ?", kb, since.UnixNano(), limit)
 	if err != nil {
 		return nil, err
 	}

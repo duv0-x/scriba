@@ -119,7 +119,7 @@ func TestSinLeer(t *testing.T) {
 	if !strings.Contains(body, `data-note="notes/a.md"`) {
 		t.Error("falta data-note en el lector")
 	}
-	if _, ok, err := e.srv.State.LastRead("default", "notes/a.md"); err != nil || !ok {
+	if _, ok, err := e.srv.State.LastRead(e.srv.KB, "default", "notes/a.md"); err != nil || !ok {
 		t.Fatalf("LastRead = %v %v", ok, err)
 	}
 

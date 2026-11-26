@@ -347,7 +347,7 @@ func (s *Server) renderConnectors(w http.ResponseWriter, r *http.Request, status
 
 // ghToken devuelve el conector de GitHub con su token descifrado; el token no debe salir del handler que lo pide.
 func (s *Server) ghToken() (state.Connector, bool, string, error) {
-	c, ok, err := s.State.Connector(connGitHub)
+	c, ok, err := s.State.KBConnector(connGitHub, s.KB)
 	if err != nil || !ok {
 		return c, false, "", err
 	}
@@ -388,7 +388,7 @@ func (s *Server) ghPoll(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	if d.deviceCode == "" {
 		// Otra pestaña ya completó la conexión: que esta recargue en vez de mostrar un error.
-		if _, ok, err := s.State.Connector(connGitHub); err == nil && ok {
+		if _, ok, err := s.State.KBConnector(connGitHub, s.KB); err == nil && ok {
 			w.Header().Set("HX-Redirect", "/conectores")
 			w.WriteHeader(http.StatusOK)
 			return
@@ -439,7 +439,7 @@ func (s *Server) ghPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	sealed, err := secrets.Seal(s.Key, []byte(tok.AccessToken))
 	if err == nil {
-		err = s.State.SaveConnector(state.Connector{Name: connGitHub, Account: login, Secret: sealed, Push: true})
+		err = s.State.SaveKBConnector(s.KB, state.Connector{Name: connGitHub, Account: login, Secret: sealed, Push: true})
 	}
 	s.clearDevice()
 	if err != nil {
@@ -500,7 +500,7 @@ func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
 
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	c, ok, err := s.State.Connector(connGitHub) // releer: pudo desconectarse durante el clone
+	c, ok, err := s.State.KBConnector(connGitHub, s.KB) // releer: pudo desconectarse durante el clone
 	if err != nil {
 		serverError(w, err)
 		return
@@ -518,7 +518,7 @@ func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.Repo = repo
-	if err := s.State.SaveConnector(c); err != nil {
+	if err := s.State.SaveKBConnector(s.KB, c); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -533,7 +533,7 @@ func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) ghLink(w http.ResponseWriter, r *http.Request, repo string) {
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	c, ok, err := s.State.Connector(connGitHub)
+	c, ok, err := s.State.KBConnector(connGitHub, s.KB)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -564,7 +564,7 @@ func (s *Server) ghLink(w http.ResponseWriter, r *http.Request, repo string) {
 		return
 	}
 	c.Repo = repo
-	if err := s.State.SaveConnector(c); err != nil {
+	if err := s.State.SaveKBConnector(s.KB, c); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -606,10 +606,10 @@ func moveInto(tmp, root string) error {
 func (s *Server) ghPush(w http.ResponseWriter, r *http.Request) {
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	c, ok, err := s.State.Connector(connGitHub)
+	c, ok, err := s.State.KBConnector(connGitHub, s.KB)
 	if err == nil && ok {
 		c.Push = r.PostFormValue("push") == "1"
-		err = s.State.SaveConnector(c)
+		err = s.State.SaveKBConnector(s.KB, c)
 	}
 	if err != nil {
 		serverError(w, err)

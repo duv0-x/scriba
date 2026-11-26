@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -13,76 +12,47 @@ import (
 	"time"
 
 	"github.com/duv0-x/scriba/internal/agents"
-	"github.com/duv0-x/scriba/internal/secrets"
 	"github.com/duv0-x/scriba/internal/state"
-	"github.com/duv0-x/scriba/internal/vault"
 )
 
-func TestDefaultDB(t *testing.T) {
-	parent := t.TempDir()
-	root := filepath.Join(parent, "vault")
-	if err := os.Mkdir(root, 0o755); err != nil {
+// postMCP envía una petición JSON-RPC a /mcp y devuelve la respuesta con su cuerpo completo.
+func postMCP(t *testing.T, url, tok, session, body string) (*http.Response, []byte) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if session != "" {
+		req.Header.Set("Mcp-Session-Id", session)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(root)
-	for _, arg := range []string{root, ".", "../vault"} {
-		v, err := vault.Open(arg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := defaultDB(v.Root)
-		if got != filepath.Join(v.Root, "..", "scriba.db") || strings.HasPrefix(got, v.Root+string(filepath.Separator)) {
-			t.Errorf("--vault %q: defaultDB = %q, quería scriba.db en el padre de %q", arg, got, v.Root)
-		}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
 	}
+	return resp, b
 }
 
-func TestGithubCredYRecordPush(t *testing.T) {
-	dir := t.TempDir()
-	st, err := state.Open(filepath.Join(dir, "state.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	key, err := secrets.LoadOrCreateKey(filepath.Join(dir, "secret.key"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c, push := githubCred(st, key); push || c.Token != "" {
-		t.Fatalf("sin conector: %+v %v", c, push)
-	}
-	sealed, err := secrets.Seal(key, []byte("gho_x"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn := state.Connector{Name: "github", Account: "a", Secret: sealed, Repo: "a/kb", Push: false}
-	if err := st.SaveConnector(conn); err != nil {
-		t.Fatal(err)
-	}
-	if _, push := githubCred(st, key); push {
-		t.Fatal("push apagado: no debería empujar")
-	}
-	conn.Push = true
-	if err := st.SaveConnector(conn); err != nil {
-		t.Fatal(err)
-	}
-	if c, push := githubCred(st, key); !push || c.Token != "gho_x" {
-		t.Fatalf("con conector: %+v %v", c, push)
-	}
-
-	recordPush(st, "0123456789abcdef", nil)
-	recordPush(st, "", errors.New("rechazado"))
-	got, _, _ := st.Connector("github")
-	if !strings.HasSuffix(got.LastPush, " · 0123456") || got.LastError != "rechazado" || !got.Push || got.Repo != "a/kb" {
-		t.Fatalf("tras recordPush: %+v", got)
-	}
-
-	if err := st.DeleteConnector("github"); err != nil {
-		t.Fatal(err)
-	}
-	recordPush(st, "fedcba9876543210", nil)
-	if _, ok, _ := st.Connector("github"); ok {
-		t.Fatal("recordPush resucitó el conector")
+// waitReady espera a que /readyz responda 200.
+func waitReady(t *testing.T, base string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		resp, err := http.Get(base + "/readyz")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("el servidor no quedó listo en 5 s")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -106,34 +76,16 @@ func TestApagadoConStreamMCP(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- runServe(ctx, serveOpts{vault: filepath.Join(dir, "vault"), db: filepath.Join(dir, "scriba.db"),
-			clientID: "x", tz: "UTC", ln: ln})
+		done <- runServe(ctx, serveOpts{data: dir, clientID: "x", tz: "UTC", ln: ln})
 	}()
 	url := "http://" + ln.Addr().String() + "/mcp"
 
-	post := func(session, body string) *http.Response {
-		t.Helper()
-		req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+tok)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json, text/event-stream")
-		if session != "" {
-			req.Header.Set("Mcp-Session-Id", session)
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-		return resp
-	}
-	resp := post("", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)
+	resp, _ := postMCP(t, url, tok, "", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)
 	session := resp.Header.Get("Mcp-Session-Id")
 	if resp.StatusCode != http.StatusOK || session == "" {
 		t.Fatalf("initialize: %d sesión=%q", resp.StatusCode, session)
 	}
-	if resp := post(session, `{"jsonrpc":"2.0","method":"notifications/initialized"}`); resp.StatusCode/100 != 2 {
+	if resp, _ := postMCP(t, url, tok, session, `{"jsonrpc":"2.0","method":"notifications/initialized"}`); resp.StatusCode/100 != 2 {
 		t.Fatalf("initialized: %d", resp.StatusCode)
 	}
 
@@ -165,11 +117,158 @@ func TestApagadoConStreamMCP(t *testing.T) {
 	}
 }
 
+// TestServeLayoutViejo: --data sobre una copia del layout viejo arranca, migra y sirve
+// las mismas notas y el mismo /mcp que antes.
+func TestServeLayoutViejo(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "vault", "notas"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "vault", "notas", "hola.md"), []byte("---\ntitle: Hola\n---\n\nLa zanahoria es una raíz.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// El índice viejo se descarta en la migración.
+	if err := os.WriteFile(filepath.Join(dir, "scriba.db"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := (&agents.Store{S: st}).Create("prueba")
+	st.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- runServe(ctx, serveOpts{data: dir, clientID: "x", tz: "UTC", ln: ln})
+	}()
+	base := "http://" + ln.Addr().String()
+	waitReady(t, base)
+
+	if _, err := os.Stat(filepath.Join(dir, "kbs", "principal", "vault", "notas", "hola.md")); err != nil {
+		t.Fatalf("nota migrada: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "vault")); !os.IsNotExist(err) {
+		t.Fatalf("el vault viejo sigue ahí: %v", err)
+	}
+
+	resp, err := http.Get(base + "/n/notas/hola.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "zanahoria") {
+		t.Fatalf("GET /n/notas/hola.md: %d", resp.StatusCode)
+	}
+
+	url := base + "/mcp"
+	resp, _ = postMCP(t, url, tok, "", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)
+	session := resp.Header.Get("Mcp-Session-Id")
+	if resp.StatusCode != http.StatusOK || session == "" {
+		t.Fatalf("initialize: %d sesión=%q", resp.StatusCode, session)
+	}
+	if resp, _ := postMCP(t, url, tok, session, `{"jsonrpc":"2.0","method":"notifications/initialized"}`); resp.StatusCode/100 != 2 {
+		t.Fatalf("initialized: %d", resp.StatusCode)
+	}
+	resp, body = postMCP(t, url, tok, session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"kb_search","arguments":{"query":"zanahoria"}}}`)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "notas/hola.md") {
+		t.Fatalf("kb_search: %d %s", resp.StatusCode, body)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("runServe: %v", err)
+	}
+
+	// Segunda ejecución sobre el mismo dir: no vuelve a migrar nada.
+	ln2, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	done2 := make(chan error, 1)
+	go func() {
+		done2 <- runServe(ctx2, serveOpts{data: dir, clientID: "x", tz: "UTC", ln: ln2})
+	}()
+	base2 := "http://" + ln2.Addr().String()
+	waitReady(t, base2)
+	resp, err = http.Get(base2 + "/n/notas/hola.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("segunda ejecución, GET nota: %d", resp.StatusCode)
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "kbs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "principal" {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("kbs = %v, quería solo [principal]", names)
+	}
+	cancel2()
+	if err := <-done2; err != nil {
+		t.Fatalf("runServe (2): %v", err)
+	}
+}
+
+// TestServeCompatVault: --vault/--db del layout viejo migran aunque el vault no se llame "vault".
+func TestServeCompatVault(t *testing.T) {
+	dir := t.TempDir()
+	oldVault := filepath.Join(dir, "v2")
+	if err := os.MkdirAll(filepath.Join(oldVault, "notas"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(oldVault, "notas", "hola.md"), []byte("---\ntitle: Hola\n---\n\nzanahoria\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- runServe(ctx, serveOpts{data: dir, oldVault: oldVault, oldIndex: filepath.Join(dir, "scriba.db"), clientID: "x", tz: "UTC", ln: ln})
+	}()
+	waitReady(t, "http://"+ln.Addr().String())
+	if _, err := os.Stat(filepath.Join(dir, "kbs", "principal", "vault", "notas", "hola.md")); err != nil {
+		t.Fatalf("nota migrada: %v", err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("runServe: %v", err)
+	}
+}
+
 func TestServeFlagsVacios(t *testing.T) {
 	dir := t.TempDir()
 	for _, args := range [][]string{
-		{"--vault", dir, "--listen", ""},
-		{"--vault", dir, "--tz", ""},
+		{},
+		{"--data", dir, "--vault", filepath.Join(dir, "vault")},
+		{"--data", dir, "--db", filepath.Join(dir, "scriba.db")},
+		{"--data", dir, "--listen", ""},
+		{"--data", dir, "--tz", ""},
 	} {
 		if code := serve(args); code != 2 {
 			t.Errorf("serve %v = %d, quiero 2", args, code)

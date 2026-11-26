@@ -106,20 +106,94 @@ func (s *Store) Connector(name string) (Connector, bool, error) {
 	return c, true, nil
 }
 
-func (s *Store) DeleteConnector(name string) error {
-	_, err := s.db.Exec("DELETE FROM connectors WHERE name = ?", name)
-	return err
+// KBConnector devuelve el conector name con su parte de la KB kb (repo, push y último push).
+// ok = false si no existe la fila en connectors. Sin fila en kb_connectors: Repo "", Push true,
+// LastPush y LastError "".
+func (s *Store) KBConnector(name, kb string) (Connector, bool, error) {
+	c := Connector{Name: name}
+	var updated int64
+	err := s.db.QueryRow(`SELECT c.account, c.secret, c.updated, COALESCE(k.repo, ''), COALESCE(k.push, 1), COALESCE(k.last_push, ''), COALESCE(k.last_error, '')
+		FROM connectors c LEFT JOIN kb_connectors k ON k.name = c.name AND k.kb = ? WHERE c.name = ?`, kb, name).
+		Scan(&c.Account, &c.Secret, &updated, &c.Repo, &c.Push, &c.LastPush, &c.LastError)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Connector{}, false, nil
+	}
+	if err != nil {
+		return Connector{}, false, err
+	}
+	c.Updated = time.Unix(0, updated)
+	return c, true, nil
 }
 
-// UpdatePushResult guarda el resultado del último push sin tocar el resto del
-// conector. lastPush vacío conserva el anterior (un fallo no borra el último
-// push bueno). Devuelve false si el conector no existe: nunca lo recrea.
-func (s *Store) UpdatePushResult(name, lastPush, lastError string) (bool, error) {
-	res, err := s.db.Exec("UPDATE connectors SET last_push = COALESCE(NULLIF(?, ''), last_push), last_error = ?, updated = ? WHERE name = ?",
-		lastPush, lastError, time.Now().UnixNano(), name)
+// SaveKBConnector guarda, en una transacción, la cuenta y el secreto de c en connectors (sin tocar
+// sus columnas repo/push/last_*) y repo, push, last_push y last_error en kb_connectors(c.Name, kb).
+// Si c.Updated es cero se usa la hora actual; Secret nil se guarda como vacío.
+func (s *Store) SaveKBConnector(kb string, c Connector) error {
+	if c.Secret == nil {
+		c.Secret = []byte{}
+	}
+	if c.Updated.IsZero() {
+		c.Updated = time.Now()
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO connectors(name, account, secret, updated) VALUES(?, ?, ?, ?)
+		ON CONFLICT(name) DO UPDATE SET account = excluded.account, secret = excluded.secret, updated = excluded.updated`,
+		c.Name, c.Account, c.Secret, c.Updated.UnixNano()); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO kb_connectors(name, kb, repo, push, last_push, last_error) VALUES(?, ?, ?, ?, ?, ?)
+		ON CONFLICT(name, kb) DO UPDATE SET repo = excluded.repo, push = excluded.push,
+		  last_push = excluded.last_push, last_error = excluded.last_error`,
+		c.Name, kb, c.Repo, c.Push, c.LastPush, c.LastError); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeleteConnector(name string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("DELETE FROM kb_connectors WHERE name = ?", name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM connectors WHERE name = ?", name); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// UpdatePushResult guarda el resultado del último push de una KB sin tocar el resto del
+// conector. lastPush vacío conserva el anterior (un fallo no borra el último push bueno).
+// Devuelve false si no existe el conector o la fila de la KB: nunca los recrea.
+func (s *Store) UpdatePushResult(name, kb, lastPush, lastError string) (bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE kb_connectors SET last_push = COALESCE(NULLIF(?, ''), last_push), last_error = ?
+		WHERE name = ? AND kb = ?`, lastPush, lastError, name, kb)
 	if err != nil {
 		return false, err
 	}
 	n, err := res.RowsAffected()
-	return n > 0, err
+	if err != nil || n == 0 {
+		return false, err
+	}
+	res, err = tx.Exec("UPDATE connectors SET updated = ? WHERE name = ?", time.Now().UnixNano(), name)
+	if err != nil {
+		return false, err
+	}
+	n, err = res.RowsAffected()
+	if err != nil || n == 0 {
+		return false, err
+	}
+	return true, tx.Commit()
 }
