@@ -381,3 +381,232 @@ func TestPusherApagadoNoHaceNada(t *testing.T) {
 		t.Fatalf("no debería haber empujado: ahead=%d err=%v", ah, err)
 	}
 }
+
+func TestCommitPathsSoloLasRutas(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, "a.md", "a\n")
+	commit(t, dir, "b.md", "b\n")
+	write(t, dir, "a.md", "a2\n")
+	write(t, dir, "b.md", "b2\n")
+
+	hash, ok, err := CommitPaths(dir, "claude", "claude: actualiza a.md", "a.md")
+	if err != nil || !ok {
+		t.Fatalf("CommitPaths: ok=%v err=%v", ok, err)
+	}
+	if got := git(t, dir, "show", "--name-only", "--format=", "HEAD"); got != "a.md" {
+		t.Fatalf("archivos en HEAD: %q", got)
+	}
+	if h, _ := Head(dir); h != hash {
+		t.Fatalf("Head=%s, CommitPaths=%s", h, hash)
+	}
+	if got := git(t, dir, "log", "-1", "--format=%an <%ae>"); got != "claude via Scriba <scriba@localhost>" {
+		t.Fatalf("autor: %q", got)
+	}
+	if got := git(t, dir, "status", "--porcelain"); !strings.Contains(got, "b.md") {
+		t.Fatalf("b.md debería seguir modificado: %q", got)
+	}
+}
+
+func TestCommitPathsSinCambios(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, "a.md", "a\n")
+	if _, ok, err := CommitPaths(dir, "test", "nada", "a.md"); err != nil || ok {
+		t.Fatalf("sin cambios: ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := CommitPaths(dir, "test", "nada"); err != nil || ok {
+		t.Fatalf("sin paths: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestCommitPathsBorradoYNueva(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, "a.md", "a\n")
+	if err := os.Remove(filepath.Join(dir, "a.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "dir/nueva.md", "n\n")
+
+	if _, ok, err := CommitPaths(dir, "test", "borra y crea", "a.md", "dir/nueva.md"); err != nil || !ok {
+		t.Fatalf("CommitPaths: ok=%v err=%v", ok, err)
+	}
+	got := git(t, dir, "show", "--name-status", "--format=", "HEAD")
+	if !strings.Contains(got, "D\ta.md") || !strings.Contains(got, "A\tdir/nueva.md") {
+		t.Fatalf("cambios en HEAD: %q", got)
+	}
+	if got := git(t, dir, "status", "--porcelain"); got != "" {
+		t.Fatalf("status debería estar limpio: %q", got)
+	}
+}
+
+func TestCommitPathsLiteral(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, "a*.md", "a\n")
+	commit(t, dir, "ab.md", "ab\n")
+	write(t, dir, "a*.md", "a2\n")
+	write(t, dir, "ab.md", "ab2\n")
+
+	if _, ok, err := CommitPaths(dir, "test", "literal", "a*.md"); err != nil || !ok {
+		t.Fatalf("CommitPaths: ok=%v err=%v", ok, err)
+	}
+	if got := git(t, dir, "show", "--name-only", "--format=", "HEAD"); got != "a*.md" {
+		t.Fatalf("archivos en HEAD: %q", got)
+	}
+	if got := git(t, dir, "status", "--porcelain"); !strings.Contains(got, "ab.md") {
+		t.Fatalf("ab.md debería seguir modificado: %q", got)
+	}
+}
+
+func TestCommitPathsConIndiceAjeno(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, "a.md", "a\n")
+	commit(t, dir, "b.md", "b\n")
+	write(t, dir, "a.md", "a2\n")
+	write(t, dir, "b.md", "b2\n")
+	git(t, dir, "add", "b.md") // b.md queda staged fuera de CommitPaths
+
+	if _, ok, err := CommitPaths(dir, "test", "solo a.md", "a.md"); err != nil || !ok {
+		t.Fatalf("CommitPaths: ok=%v err=%v", ok, err)
+	}
+	if got := git(t, dir, "show", "--name-only", "--format=", "HEAD"); got != "a.md" {
+		t.Fatalf("archivos en HEAD: %q", got)
+	}
+}
+
+func TestDirty(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, "modificada.md", "m\n")
+	commit(t, dir, "borrada.md", "b\n")
+
+	if paths, err := Dirty(dir); err != nil || paths != nil {
+		t.Fatalf("repo limpio: %v %v", paths, err)
+	}
+
+	write(t, dir, "modificada.md", "m2\n")
+	if err := os.Remove(filepath.Join(dir, "borrada.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "sub/nueva.md", "n\n")
+
+	paths, err := Dirty(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"borrada.md", "modificada.md", "sub/nueva.md"}
+	if strings.Join(paths, ",") != strings.Join(want, ",") {
+		t.Fatalf("Dirty=%v, esperado %v", paths, want)
+	}
+}
+
+func TestPullConCambiosSinCommit(t *testing.T) {
+	ctx := context.Background()
+	bare := setup(t)
+	a := clone(t, bare, Cred{})
+	b := clone(t, bare, Cred{})
+
+	commit(t, b, "remoto.md", "r\n")
+	if err := Push(ctx, b, Cred{}); err != nil {
+		t.Fatal(err)
+	}
+	// Cambio local sin commit en a: sin autostash el pull --rebase se niega.
+	write(t, a, "README.md", "sucio\n")
+
+	if err := Pull(ctx, a, Cred{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(a, "remoto.md")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(filepath.Join(a, "README.md")); err != nil || string(got) != "sucio\n" {
+		t.Fatalf("README.md=%q err=%v, el cambio local debía sobrevivir", got, err)
+	}
+}
+
+func TestCommitPathsIgnoradas(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, dir, ".gitignore", "priv/\n")
+	commit(t, dir, "b.md", "b\n")
+	if err := os.Mkdir(filepath.Join(dir, "priv"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "priv/a.md", "a\n")
+	write(t, dir, "priv/ñandú.md", "ñ\n")
+
+	// Todas ignoradas: sin commit y sin error (también con caracteres no ASCII,
+	// que git entrecomillaría en la salida sin -z).
+	if _, ok, err := CommitPaths(dir, "test", "solo ignorada", "priv/a.md"); err != nil || ok {
+		t.Fatalf("solo ignorada: ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := CommitPaths(dir, "test", "ignorada no ASCII", "priv/ñandú.md"); err != nil || ok {
+		t.Fatalf("ignorada no ASCII: ok=%v err=%v", ok, err)
+	}
+	// Mezcla: commitea solo la no ignorada.
+	write(t, dir, "b.md", "b2\n")
+	if _, ok, err := CommitPaths(dir, "test", "mezcla", "priv/a.md", "b.md"); err != nil || !ok {
+		t.Fatalf("mezcla: ok=%v err=%v", ok, err)
+	}
+	if got := git(t, dir, "show", "--name-only", "--format=", "HEAD"); got != "b.md" {
+		t.Fatalf("archivos en HEAD: %q", got)
+	}
+}
+
+func TestPullConflictoAutostash(t *testing.T) {
+	ctx := context.Background()
+	bare := setup(t)
+	a := clone(t, bare, Cred{})
+	commit(t, a, "n.md", "base\n")
+	if err := Push(ctx, a, Cred{}); err != nil {
+		t.Fatal(err)
+	}
+	b := clone(t, bare, Cred{})
+	commit(t, b, "n.md", "remoto\n")
+	if err := Push(ctx, b, Cred{}); err != nil {
+		t.Fatal(err)
+	}
+	// Cambio local sin commit que choca con el remoto al reaplicar el stash.
+	write(t, a, "n.md", "local\n")
+
+	err := Pull(ctx, a, Cred{})
+	if err == nil || !strings.Contains(err.Error(), "conflicto al reaplicar cambios locales en n.md") {
+		t.Fatalf("Pull: %v", err)
+	}
+	got, rerr := os.ReadFile(filepath.Join(a, "n.md"))
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	if string(got) != "remoto\n" || strings.Contains(string(got), "<<<<<<<") {
+		t.Fatalf("n.md=%q, debía quedar igual a HEAD y sin marcas de conflicto", got)
+	}
+	if s := git(t, a, "status", "--porcelain"); strings.Contains(s, "UU") {
+		t.Fatalf("status con rutas unmerged: %q", s)
+	}
+	if s := git(t, a, "stash", "list"); !strings.Contains(s, "stash@{0}") {
+		t.Fatalf("el cambio local debía quedar en el stash: %q", s)
+	}
+}

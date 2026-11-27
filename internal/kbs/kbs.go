@@ -210,6 +210,11 @@ func (r *Registry) open(slug string) (*KB, error) {
 	k.pusher = pusher
 	k.gitMu = &gitMu
 	k.W = writer.New(writer.Config{V: v, Ix: ix, Act: activity{r.cfg.State, slug}, Loc: r.cfg.Loc, GitMu: &gitMu, Push: pusher.Trigger, OnChange: pub.Agent})
+	pusher.BeforePull = k.W.FlushPendingHeld
+	// Un proceso que murió con commits web diferidos deja rutas sin commit (ADR-014).
+	if err := k.W.Sweep(); err != nil {
+		slog.Warn("barrido de cambios sin commit al arrancar", "kb", slug, "err", err)
+	}
 	// Los commits que quedaron sin empujar durante un apagado se empujan al arrancar.
 	if _, push := githubCred(r.cfg.State, r.cfg.Key, slug); push && gitvault.IsRepo(v.Root) {
 		if ahead, _, err := gitvault.Status(r.ctx, v.Root); err != nil {
@@ -348,11 +353,13 @@ func (r *Registry) Delete(slug string) error {
 func stop(k *KB) error {
 	k.cancel()
 	<-k.done
+	// Los commits web pendientes se hacen antes de cerrar; el push queda para el próximo arranque.
+	wErr := k.W.Close()
 	k.pusher.Close()
 	k.gitMu.Lock()
 	defer k.gitMu.Unlock()
 	k.pub.Close()
-	return k.Ix.Close()
+	return errors.Join(wErr, k.Ix.Close())
 }
 
 // Close para todas las KBs.

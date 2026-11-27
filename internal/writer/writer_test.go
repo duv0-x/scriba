@@ -70,6 +70,39 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// setupIdle es setup(t, true) con WebIdle corto para los commits web diferidos.
+func setupIdle(t *testing.T, idle time.Duration) *env {
+	t.Helper()
+	root := t.TempDir()
+	if err := gitvault.Init(root); err != nil {
+		t.Fatal(err)
+	}
+	v, err := vault.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix, err := index.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ix.Close() })
+	e := &env{root: root, ix: ix, act: &fakeAct{}}
+	e.w = New(Config{V: v, Ix: ix, Act: e.act, Loc: time.UTC, Push: func() { e.pushes.Add(1) }, WebIdle: idle})
+	return e
+}
+
+// waitFor sondea cond cada 20 ms hasta 5 s y falla si no se cumple.
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal("la condición no se cumplió en 5 s")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func read(t *testing.T, root, rel string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(root, rel))
@@ -244,6 +277,36 @@ func TestConcurrente(t *testing.T) {
 	}
 }
 
+// TestOnChangeLlevaHash comprueba que OnChange y Result traen el SHA-256 de lo que quedó en disco.
+func TestOnChangeLlevaHash(t *testing.T) {
+	root := t.TempDir()
+	v, err := vault.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix, err := index.Open(filepath.Join(t.TempDir(), "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ix.Close() })
+	var gotPath, gotAgent, gotHash string
+	w := New(Config{V: v, Ix: ix, Loc: time.UTC, OnChange: func(path, agent, hash string) {
+		gotPath, gotAgent, gotHash = path, agent, hash
+	}})
+	res, err := w.Write("claude", "a.md", "hola", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte("hola\n")) // lo que queda en disco
+	want := hex.EncodeToString(sum[:])
+	if gotHash != want || gotPath != "a.md" || gotAgent != "claude" {
+		t.Fatalf("OnChange = %q %q %q, quiero %q %q %q", gotPath, gotAgent, gotHash, "a.md", "claude", want)
+	}
+	if res.Hash != want {
+		t.Fatalf("res.Hash = %q, quiero %q", res.Hash, want)
+	}
+}
+
 func TestSinGit(t *testing.T) {
 	e := setup(t, false)
 	res, err := e.w.Write("a", "x.md", "hola mundo", "")
@@ -372,5 +435,243 @@ func TestWriteIfUnchanged(t *testing.T) {
 	sum = sha256.Sum256(cur)
 	if _, err := w.WriteIfUnchanged("web", "notas/a.md", "editado", "", hex.EncodeToString(sum[:])); err != nil {
 		t.Fatalf("con el hash vigente debía escribir: %v", err)
+	}
+}
+
+// TestAutosaveAgrupa: dos guardados web seguidos de la misma ruta se commitean
+// como uno solo tras WebIdle, con autor y mensaje web.
+func TestAutosaveAgrupa(t *testing.T) {
+	e := setupIdle(t, 300*time.Millisecond)
+	base, err := e.w.Write("claude", "a.md", "base", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res1, err := e.w.Autosave("a.md", "web uno", base.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Autosave("a.md", "web dos", res1.Hash); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "rev-list", "--count", "HEAD"); got != "1" {
+		t.Fatalf("commits antes de WebIdle: %s", got)
+	}
+	if got := read(t, e.root, "a.md"); got != "web dos\n" {
+		t.Fatalf("contenido: %q", got)
+	}
+	waitFor(t, func() bool { return gitOut(t, e.root, "rev-list", "--count", "HEAD") == "2" })
+	if got := gitOut(t, e.root, "log", "-1", "--format=%an|%s"); got != "web via Scriba|web: actualiza a.md" {
+		t.Fatalf("log: %q", got)
+	}
+	if got := gitOut(t, e.root, "status", "--porcelain"); got != "" {
+		t.Fatalf("status: %q", got)
+	}
+	if n := e.pushes.Load(); n != 2 { // el Write de la base y el commit diferido
+		t.Fatalf("pushes=%d", n)
+	}
+}
+
+func TestAutosaveConflicto(t *testing.T) {
+	e := setupIdle(t, time.Hour)
+	if _, err := e.w.Write("claude", "a.md", "base", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Autosave("a.md", "web", "hash-que-no-es"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("esperaba ErrConflict, fue %v", err)
+	}
+}
+
+// TestAgenteTrasAutosaveMismaRuta: una escritura de agente sobre una ruta con commit
+// web pendiente hace antes ese commit, y la historia queda web → agente.
+func TestAgenteTrasAutosaveMismaRuta(t *testing.T) {
+	e := setupIdle(t, time.Hour)
+	base, err := e.w.Write("claude", "a.md", "base", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Autosave("a.md", "web", base.Hash); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Write("claude", "a.md", "agente", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "log", "-2", "--format=%s"); got != "claude: actualiza a.md\nweb: actualiza a.md" {
+		t.Fatalf("log: %q", got)
+	}
+	if got := gitOut(t, e.root, "show", "HEAD~1:a.md"); got != "web" {
+		t.Fatalf("HEAD~1:a.md: %q", got)
+	}
+}
+
+// TestAgenteNoSeLlevaOtraRuta: el commit de un agente solo toca su ruta; el cambio
+// web pendiente de otra ruta sigue sin commit hasta Flush.
+func TestAgenteNoSeLlevaOtraRuta(t *testing.T) {
+	e := setupIdle(t, time.Hour)
+	ra, err := e.w.Write("claude", "a.md", "a", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Write("claude", "b.md", "b", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Autosave("a.md", "web", ra.Hash); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Write("claude", "b.md", "b2", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "show", "--name-only", "--format=", "HEAD"); got != "b.md" {
+		t.Fatalf("archivos de HEAD: %q", got)
+	}
+	if got := gitOut(t, e.root, "status", "--porcelain"); !strings.Contains(got, "a.md") {
+		t.Fatalf("status sin a.md: %q", got)
+	}
+	if err := e.w.Flush("a.md"); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "status", "--porcelain"); got != "" {
+		t.Fatalf("status tras Flush: %q", got)
+	}
+	if got := gitOut(t, e.root, "log", "-1", "--format=%s"); got != "web: actualiza a.md" {
+		t.Fatalf("log: %q", got)
+	}
+}
+
+// TestCloseHaceLosPendientes: Close commitea lo diferido; después Autosave es inmediato.
+func TestCloseHaceLosPendientes(t *testing.T) {
+	e := setupIdle(t, time.Hour)
+	ra, err := e.w.Write("claude", "a.md", "a", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb, err := e.w.Write("claude", "b.md", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ra, err = e.w.Autosave("a.md", "web a", ra.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Autosave("b.md", "web b", rb.Hash); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "status", "--porcelain"); got != "" {
+		t.Fatalf("status: %q", got)
+	}
+	if got := gitOut(t, e.root, "log", "-2", "--format=%s"); got != "web: actualiza b.md\nweb: actualiza a.md" {
+		t.Fatalf("log: %q", got)
+	}
+	// Tras Close, Autosave commitea al momento.
+	res, err := e.w.Autosave("a.md", "otra", ra.Hash)
+	if err != nil || res.Commit == "" {
+		t.Fatalf("Autosave tras Close: %+v %v", res, err)
+	}
+	if err := e.w.Close(); err != nil {
+		t.Fatalf("Close idempotente: %v", err)
+	}
+}
+
+// TestSweep: al abrir la KB se commitean como web las rutas que quedaron sin commit.
+func TestSweep(t *testing.T) {
+	e := setup(t, true)
+	if _, err := e.w.Write("claude", "a.md", "a", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.root, "a.md"), []byte("modificado\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.root, "b.md"), []byte("nueva\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.w.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "status", "--porcelain"); got != "" {
+		t.Fatalf("status: %q", got)
+	}
+	if got := gitOut(t, e.root, "log", "-1", "--format=%an|%s"); got != "web via Scriba|web: actualiza 2 rutas pendientes" {
+		t.Fatalf("log: %q", got)
+	}
+	// Sin cambios: nil y sin commit nuevo.
+	if err := e.w.Sweep(); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "rev-list", "--count", "HEAD"); got != "2" {
+		t.Fatalf("commits: %s", got)
+	}
+}
+
+// TestAutosaveActividadUnaVez: los guardados diferidos no registran actividad por
+// guardado; se registra una sola vez al hacer el commit (Flush).
+func TestAutosaveActividadUnaVez(t *testing.T) {
+	e := setupIdle(t, time.Hour)
+	base, err := e.w.Write("claude", "a.md", "base", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	webWrites := func() int {
+		n := 0
+		for _, a := range e.act.actions {
+			if a == "web write a.md" {
+				n++
+			}
+		}
+		return n
+	}
+	res1, err := e.w.Autosave("a.md", "uno", base.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Autosave("a.md", "dos", res1.Hash); err != nil {
+		t.Fatal(err)
+	}
+	if n := webWrites(); n != 0 {
+		t.Fatalf("actividad de guardados diferidos: %d", n)
+	}
+	if err := e.w.Flush("a.md"); err != nil {
+		t.Fatal(err)
+	}
+	if n := webWrites(); n != 1 {
+		t.Fatalf("actividad tras Flush: %d", n)
+	}
+}
+
+// TestFlushPendingHeld: con el lock del repo ya tomado (como hace el Pusher antes del
+// pull), hace todos los commits web pendientes sin tocar closed.
+func TestFlushPendingHeld(t *testing.T) {
+	e := setupIdle(t, time.Hour)
+	ra, err := e.w.Write("claude", "a.md", "a", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb, err := e.w.Write("claude", "b.md", "b", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resa, err := e.w.Autosave("a.md", "web a", ra.Hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.w.Autosave("b.md", "web b", rb.Hash); err != nil {
+		t.Fatal(err)
+	}
+	e.w.mu.Lock()
+	err = e.w.FlushPendingHeld()
+	e.w.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, e.root, "status", "--porcelain"); got != "" {
+		t.Fatalf("status: %q", got)
+	}
+	if got := gitOut(t, e.root, "rev-list", "--count", "HEAD"); got != "4" {
+		t.Fatalf("commits: %s", got)
+	}
+	// No toca closed: Autosave sigue difiriendo.
+	if res, err := e.w.Autosave("a.md", "otra", resa.Hash); err != nil || res.Commit != "" {
+		t.Fatalf("Autosave tras FlushPendingHeld: %+v %v", res, err)
 	}
 }

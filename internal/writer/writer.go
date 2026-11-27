@@ -1,5 +1,8 @@
-// Package writer serializa las escrituras de agentes sobre el vault: valida la ruta,
-// escribe de forma atómica, reindexa la nota, hace commit y dispara el push.
+// Package writer serializa las escrituras de agentes y de la web sobre el vault:
+// valida la ruta, escribe de forma atómica, reindexa la nota y dispara el push.
+// Los agentes commitean al momento; los guardados web (Autosave) agrupan los
+// cambios de cada ruta en un commit diferido que se hace tras WebIdle, con Flush,
+// con Close o justo antes de cualquier otra escritura de esa ruta.
 package writer
 
 import (
@@ -8,9 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -30,10 +35,13 @@ type Activity interface {
 type Config struct {
 	V        *vault.Vault
 	Ix       *index.Index
-	Act      Activity                 // puede ser nil
-	Loc      *time.Location           // zona para el journal (nil = UTC)
-	Push     func()                   // dispara el push (nil = sin push)
-	OnChange func(path, agent string) // nil permitido
+	Act      Activity                       // puede ser nil
+	Loc      *time.Location                 // zona para el journal (nil = UTC)
+	Push     func()                         // dispara el push (nil = sin push)
+	OnChange func(path, agent, hash string) // nil permitido; hash = SHA-256 hex de lo escrito
+	// WebIdle es cuánto espera el commit de un guardado web (Autosave) sin otro guardado
+	// en la misma ruta (0 = 60 s).
+	WebIdle time.Duration
 	// GitMu serializa todo lo que toca el repo git del vault; compártelo con el
 	// Pusher. nil = el Writer crea uno propio.
 	GitMu *sync.Mutex
@@ -42,9 +50,13 @@ type Config struct {
 // Writer escribe notas en el vault, una a la vez. Cada escritura (lectura previa,
 // escritura y commit) ocurre bajo cfg.GitMu, así un pull nunca ve el árbol a medias.
 type Writer struct {
-	mu  *sync.Mutex
-	cfg Config
+	mu      *sync.Mutex
+	cfg     Config
+	pending map[string]*pendingCommit // commits web diferidos por ruta
+	closed  bool                      // tras Close, Autosave commitea al momento
 }
+
+type pendingCommit struct{ t *time.Timer }
 
 var (
 	ErrInvalidPath = errors.New("writer: ruta no permitida")
@@ -54,11 +66,15 @@ var (
 // MaxBytes es el tamaño máximo de una nota (y de lo que se añade).
 const MaxBytes = 1 << 20
 
+// WebAgent es el autor de los guardados web (Autosave).
+const WebAgent = "web"
+
 // Result describe una escritura: la ruta, el commit (vacío si no hubo) y si se creó.
 type Result struct {
 	Path    string
 	Commit  string
 	Created bool
+	Hash    string // SHA-256 hex del contenido escrito en disco
 }
 
 // New crea un Writer.
@@ -69,7 +85,10 @@ func New(cfg Config) *Writer {
 	if cfg.GitMu == nil {
 		cfg.GitMu = &sync.Mutex{}
 	}
-	return &Writer{mu: cfg.GitMu, cfg: cfg}
+	if cfg.WebIdle == 0 {
+		cfg.WebIdle = 60 * time.Second
+	}
+	return &Writer{mu: cfg.GitMu, cfg: cfg, pending: map[string]*pendingCommit{}}
 }
 
 // Write crea o reemplaza la nota path con content.
@@ -88,7 +107,7 @@ func (w *Writer) Write(agent, path, content, message string) (Result, error) {
 	if created {
 		action = "create"
 	}
-	return w.save(agent, path, abs, content, message, action, created, time.Now())
+	return w.save(agent, path, abs, content, message, action, created, time.Now(), false)
 }
 
 // ErrConflict indica que la nota cambió desde que se leyó (bloqueo optimista del editor web).
@@ -96,8 +115,20 @@ var ErrConflict = errors.New("writer: la nota cambió desde que se abrió")
 
 // WriteIfUnchanged reemplaza path solo si su contenido actual tiene el SHA-256 (hex) base.
 // La comparación ocurre bajo el mismo lock que las escrituras de los agentes, así un cambio
-// de un agente nunca se pisa.
+// de un agente nunca se pisa. El commit es inmediato (lo usa el editor viejo /editar).
 func (w *Writer) WriteIfUnchanged(agent, path, content, message, base string) (Result, error) {
+	return w.writeIfUnchanged(agent, path, content, message, base, false)
+}
+
+// Autosave reemplaza path como WriteIfUnchanged, con autor WebAgent, pero difiere el commit:
+// "web: actualiza <path>" se hace tras WebIdle sin otro Autosave de esa ruta, con Flush,
+// con Close o justo antes de cualquier otra escritura de esa ruta. El archivo, el índice
+// y OnChange se actualizan al momento.
+func (w *Writer) Autosave(path, content, base string) (Result, error) {
+	return w.writeIfUnchanged(WebAgent, path, content, "", base, true)
+}
+
+func (w *Writer) writeIfUnchanged(agent, path, content, message, base string, deferred bool) (Result, error) {
 	if err := checkContent(content); err != nil {
 		return Result{}, err
 	}
@@ -114,7 +145,7 @@ func (w *Writer) WriteIfUnchanged(agent, path, content, message, base string) (R
 	if sum := sha256.Sum256(cur); hex.EncodeToString(sum[:]) != base {
 		return Result{}, ErrConflict
 	}
-	return w.save(agent, path, abs, content, message, "write", false, time.Now())
+	return w.save(agent, path, abs, content, message, "write", false, time.Now(), deferred)
 }
 
 // Append añade content al final de path, separado por una línea en blanco; crea la nota si no existe.
@@ -135,7 +166,7 @@ func (w *Writer) Append(agent, path, content string) (Result, error) {
 	if !created {
 		content = strings.TrimRight(old, "\n") + "\n\n" + content
 	}
-	return w.save(agent, path, abs, content, "", "append", created, time.Now())
+	return w.save(agent, path, abs, content, "", "append", created, time.Now(), false)
 }
 
 // LogJournal añade una sección "## title" con body a journal/YYYY-MM-DD.md (fecha de now en Loc).
@@ -163,21 +194,34 @@ func (w *Writer) LogJournal(agent, title, body string, now time.Time) (Result, e
 		old = "---\ndate: " + day + "\ntype: journal\n---\n\n# " + day + "\n"
 	}
 	content := strings.TrimRight(old, "\n") + "\n\n## " + title + "\n\n" + strings.TrimSpace(body) + "\n"
-	return w.save(agent, p, abs, content, "", "journal", created, now)
+	return w.save(agent, p, abs, content, "", "journal", created, now, false)
 }
 
-// save escribe, reindexa, avisa del cambio, hace commit, dispara el push y registra la actividad. Requiere w.mu.
+// save escribe, reindexa, avisa del cambio, hace commit (con deferred solo lo agenda),
+// dispara el push y registra la actividad (la de un guardado diferido se registra en
+// flushLocked, al hacer su commit). Requiere w.mu.
 // Una vez escrito el archivo, los fallos del índice y de la actividad solo se registran:
-// la nota ya está en disco (y en git) y el watcher la reindexa.
-func (w *Writer) save(agent, rel, abs, content, message, action string, created bool, now time.Time) (Result, error) {
+// la nota ya está en disco (y en git, o pendiente de su commit diferido) y el watcher
+// la reindexa.
+func (w *Writer) save(agent, rel, abs, content, message, action string, created bool, now time.Time, deferred bool) (Result, error) {
 	if len(content) > MaxBytes {
 		return Result{}, fmt.Errorf("%w: %d bytes (máximo %d)", ErrTooLarge, len(content), MaxBytes)
 	}
+	if !deferred {
+		// El commit web pendiente de esta ruta se hace antes: la historia queda
+		// "web: …" → "<agente>: …" y nunca se mezcla el contenido web con la
+		// autoría del agente.
+		if err := w.flushLocked(rel); err != nil {
+			return Result{}, fmt.Errorf("writer: commit web pendiente de %s: %w", rel, err)
+		}
+	}
 	content = strings.TrimRight(content, "\n") + "\n"
+	sum := sha256.Sum256([]byte(content))
+	h := hex.EncodeToString(sum[:])
 	if err := atomicWrite(abs, []byte(content)); err != nil {
 		return Result{}, err
 	}
-	res := Result{Path: rel, Created: created}
+	res := Result{Path: rel, Created: created, Hash: h}
 	if n, err := w.cfg.V.Read(rel); err != nil {
 		slog.Warn("writer: leer para reindexar", "path", rel, "err", err)
 	} else if err := w.cfg.Ix.Upsert(n); err != nil {
@@ -186,33 +230,148 @@ func (w *Writer) save(agent, rel, abs, content, message, action string, created 
 	// Se avisa antes del commit: el archivo ya cambió aunque el commit falle, y en la Pi el
 	// commit puede tardar más que el debounce del watcher.
 	if w.cfg.OnChange != nil {
-		w.cfg.OnChange(rel, agent)
+		w.cfg.OnChange(rel, agent, h)
 	}
+	scheduled := false
 	if gitvault.IsRepo(w.cfg.V.Root) {
-		if message == "" {
-			verb := "actualiza"
-			if created {
-				verb = "crea"
+		if deferred && !w.closed {
+			// Sin commit: se (re)agenda el commit diferido de esta ruta.
+			w.schedule(rel)
+			scheduled = true
+		} else {
+			if message == "" {
+				verb := "actualiza"
+				if created {
+					verb = "crea"
+				}
+				message = agent + ": " + verb + " " + rel
 			}
-			message = agent + ": " + verb + " " + rel
-		}
-		hash, ok, err := gitvault.CommitAll(w.cfg.V.Root, agent, message)
-		if err != nil {
-			return res, fmt.Errorf("writer: commit: %w", err)
-		}
-		if ok {
-			res.Commit = hash
-			if w.cfg.Push != nil {
-				w.cfg.Push()
+			hash, ok, err := gitvault.CommitPaths(w.cfg.V.Root, agent, message, rel)
+			if err != nil {
+				return res, fmt.Errorf("writer: commit: %w", err)
+			}
+			if ok {
+				res.Commit = hash
+				if w.cfg.Push != nil {
+					w.cfg.Push()
+				}
 			}
 		}
 	}
-	if w.cfg.Act != nil {
+	// Los guardados diferidos registran su actividad en flushLocked, una vez por commit
+	// y no por guardado: con autosave cada pocos segundos, state.db crecería sin parar.
+	if w.cfg.Act != nil && !scheduled {
 		if err := w.cfg.Act.AddActivity(now, agent, action, rel); err != nil {
 			slog.Warn("writer: registrar actividad", "path", rel, "agent", agent, "err", err)
 		}
 	}
 	return res, nil
+}
+
+// schedule (re)programa el commit diferido de rel. Requiere w.mu.
+func (w *Writer) schedule(rel string) {
+	if p := w.pending[rel]; p != nil {
+		p.t.Stop()
+	}
+	p := &pendingCommit{}
+	p.t = time.AfterFunc(w.cfg.WebIdle, func() { w.flushIf(rel, p) }) // flushIf espera a w.mu: p.t ya está asignado
+	w.pending[rel] = p
+}
+
+// flushIf commitea rel si su commit pendiente sigue siendo p (no se re-agendó ni se hizo ya).
+func (w *Writer) flushIf(rel string, p *pendingCommit) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.pending[rel] != p {
+		return
+	}
+	if err := w.flushLocked(rel); err != nil {
+		slog.Warn("writer: commit web diferido", "path", rel, "err", err)
+	}
+}
+
+// Flush hace ya el commit web pendiente de path, si lo hay.
+func (w *Writer) Flush(path string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.flushLocked(path)
+}
+
+// flushLocked commitea el cambio web pendiente de rel. Requiere w.mu.
+func (w *Writer) flushLocked(rel string) error {
+	p := w.pending[rel]
+	if p == nil {
+		return nil
+	}
+	p.t.Stop()
+	delete(w.pending, rel)
+	// El pendiente ya se borró: si el commit falla, el cambio queda en disco y lo
+	// recoge el barrido del arranque (Sweep) o el siguiente commit de esta ruta.
+	_, ok, err := gitvault.CommitPaths(w.cfg.V.Root, WebAgent, WebAgent+": actualiza "+rel, rel)
+	// La actividad del guardado web se registra aquí, una vez por commit, también si
+	// el commit falla: la escritura ya ocurrió.
+	if w.cfg.Act != nil {
+		if aerr := w.cfg.Act.AddActivity(time.Now(), WebAgent, "write", rel); aerr != nil {
+			slog.Warn("writer: registrar actividad", "path", rel, "agent", WebAgent, "err", aerr)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if ok && w.cfg.Push != nil {
+		w.cfg.Push()
+	}
+	return nil
+}
+
+// FlushPendingHeld hace todos los commits web pendientes. Requiere GitMu tomado
+// (lo llama el Pusher antes del pull).
+func (w *Writer) FlushPendingHeld() error {
+	var errs []error
+	for _, rel := range slices.Sorted(maps.Keys(w.pending)) {
+		if err := w.flushLocked(rel); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", rel, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Close hace los commits web pendientes; después, Autosave commitea al momento.
+func (w *Writer) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.closed = true
+	return w.FlushPendingHeld()
+}
+
+// Sweep commitea como WebAgent las rutas que quedaron sin commit (el proceso murió con
+// commits web pendientes). Se llama al abrir la KB.
+func (w *Writer) Sweep() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	root := w.cfg.V.Root
+	if !gitvault.IsRepo(root) {
+		return nil
+	}
+	paths, err := gitvault.Dirty(root)
+	if err != nil {
+		return err
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	msg := WebAgent + ": actualiza " + paths[0]
+	if len(paths) > 1 {
+		msg = fmt.Sprintf("%s: actualiza %d rutas pendientes", WebAgent, len(paths))
+	}
+	_, ok, err := gitvault.CommitPaths(root, WebAgent, msg, paths...)
+	if err != nil {
+		return err
+	}
+	if ok && w.cfg.Push != nil {
+		w.cfg.Push()
+	}
+	return nil
 }
 
 // abs valida rel y devuelve su ruta absoluta dentro del vault.

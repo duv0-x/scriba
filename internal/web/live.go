@@ -25,6 +25,7 @@ type liveEvent struct {
 	Path  string `json:"path"`
 	Agent string `json:"agent"`
 	Kind  string `json:"kind"`
+	Hash  string `json:"hash,omitempty"`
 }
 
 type livePresence struct {
@@ -78,7 +79,7 @@ func (s *kbServer) events(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case e, ok := <-ch:
-			if !ok || !send("changed", liveEvent{Path: e.Path, Agent: e.Agent, Kind: string(e.Kind)}) || !presence() {
+			if !ok || !send("changed", liveEvent{Path: e.Path, Agent: e.Agent, Kind: string(e.Kind), Hash: e.Hash}) || !presence() {
 				return
 			}
 		}

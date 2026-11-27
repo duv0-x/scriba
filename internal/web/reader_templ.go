@@ -17,7 +17,7 @@ import (
 	"github.com/duv0-x/scriba/internal/vault"
 )
 
-func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, back []index.NoteRef, banner string, editable bool, kindle bool) templ.Component {
+func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, back []index.NoteRef, banner string, edit *noteEdit, kindle bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -51,38 +51,48 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\"><article><div class=\"crumbs\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if edit != nil {
+			templ_7745c5c3_Err = templ.JSONScript("nota-editable", edit).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<article><div class=\"crumbs\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(n.Path)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 15, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 18, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</div><div class=\"title-row\"><h1 class=\"doc-title\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><div class=\"title-row\"><h1 class=\"doc-title\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(n.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 17, Col: 35}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 20, Col: 35}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</h1>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</h1>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if editable || kindle {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"title-actions\">")
+		if edit != nil || kindle {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<div class=\"title-actions\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -92,90 +102,90 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 					return templ_7745c5c3_Err
 				}
 			}
-			if editable {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<a class=\"btn\" href=\"")
+			if edit != nil {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<a class=\"btn\" href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var5 templ.SafeURL
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(editHref(ctx, n.Path))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 24, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 27, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\" hx-boost=\"false\">Editar</a>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "\" hx-boost=\"false\">Editar</a>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</div><div class=\"meta\"><span class=\"chip\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div><div class=\"meta\"><span class=\"chip\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(typeLabel(n.Type))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 30, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 33, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</span> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, t := range n.Tags {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<span class=\"chip plain\">#")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<span class=\"chip plain\">#")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(t)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 32, Col: 34}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 35, Col: 34}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if banner != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<div class=\"changes\" role=\"status\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"changes\" role=\"status\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(banner)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 36, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 39, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<div class=\"prose\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<div class=\"prose\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -183,7 +193,7 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div></article><aside class=\"aside\" aria-label=\"Contexto de la nota\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</div></article><aside class=\"aside\" aria-label=\"Contexto de la nota\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -191,25 +201,25 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<section><h2 class=\"eyebrow\">En esta nota</h2><div class=\"read-bar\" aria-hidden=\"true\"><span></span></div><div class=\"read-meta\"><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<section><h2 class=\"eyebrow\">En esta nota</h2><div class=\"read-bar\" aria-hidden=\"true\"><span></span></div><div class=\"read-meta\"><span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(readingMinutes(n.Words)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 48, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 51, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, " min de lectura</span> <span class=\"pct\" aria-live=\"off\">0 %</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, " min de lectura</span> <span class=\"pct\" aria-live=\"off\">0 %</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(headings) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<ul>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<ul>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -219,7 +229,7 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<li class=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<li class=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -232,182 +242,182 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\"><a class=\"toc\" href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\"><a class=\"toc\" href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var12 templ.SafeURL
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("#" + h.ID))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 54, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 57, Col: 98}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\" data-id=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "\" data-id=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(h.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 54, Col: 115}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 57, Col: 115}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(h.Text)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 54, Col: 126}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 57, Col: 126}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</a></li>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</a></li>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</ul>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</ul>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</section><script>\n\t\t\t\t\t// Marca en \"En esta nota\" la sección que se está leyendo y llena la barra según el scroll.\n\t\t\t\t\t(() => {\n\t\t\t\t\t\t// Con la navegación parcial (ADR-009) este script corre en cada nota: suelta los listeners de la anterior.\n\t\t\t\t\t\twindow.scribaLector?.abort();\n\t\t\t\t\t\tconst { signal } = (window.scribaLector = new AbortController());\n\t\t\t\t\t\tconst links = new Map([...document.querySelectorAll(\".aside a.toc\")].map(a => [a.dataset.id, a]));\n\t\t\t\t\t\tconst root = document.querySelector(\".view\");\n\t\t\t\t\t\tconst io = new IntersectionObserver(es => es.forEach(e => {\n\t\t\t\t\t\t\tif (!e.isIntersecting) return;\n\t\t\t\t\t\t\tlinks.forEach(a => a.classList.remove(\"on\"));\n\t\t\t\t\t\t\tconst a = links.get(e.target.id);\n\t\t\t\t\t\t\tif (!a) return;\n\t\t\t\t\t\t\ta.classList.add(\"on\");\n\t\t\t\t\t\t\t// Mantiene el enlace activo visible en el panel; scrollIntoView movería también la nota.\n\t\t\t\t\t\t\tconst aside = a.closest(\".aside\"), ar = aside.getBoundingClientRect(), lr = a.getBoundingClientRect();\n\t\t\t\t\t\t\tif (lr.top < ar.top || lr.bottom > ar.bottom) aside.scrollTop += lr.top - ar.top - ar.height / 2;\n\t\t\t\t\t\t}), { root, rootMargin: \"0px 0px -70% 0px\" });\n\t\t\t\t\t\tdocument.querySelectorAll(\".prose :is(h2, h3)[id]\").forEach(h => links.has(h.id) && io.observe(h));\n\t\t\t\t\t\tsignal.addEventListener(\"abort\", () => io.disconnect());\n\n\t\t\t\t\t\tconst art = document.querySelector(\".reader article\");\n\t\t\t\t\t\tconst bar = document.querySelector(\".aside .read-bar span\");\n\t\t\t\t\t\tconst pct = document.querySelector(\".aside .read-meta .pct\");\n\t\t\t\t\t\tconst update = () => {\n\t\t\t\t\t\t\tconst r = art.getBoundingClientRect(), v = root.getBoundingClientRect();\n\t\t\t\t\t\t\tconst span = r.height - root.clientHeight;\n\t\t\t\t\t\t\tconst p = Math.min(1, Math.max(0, span <= 0 ? 1 : (v.top - r.top) / span));\n\t\t\t\t\t\t\tbar.style.width = (p * 100) + \"%\";\n\t\t\t\t\t\t\tpct.textContent = Math.round(p * 100) + \" %\";\n\t\t\t\t\t\t};\n\t\t\t\t\t\troot.addEventListener(\"scroll\", update, { passive: true, signal });\n\t\t\t\t\t\taddEventListener(\"resize\", update, { signal });\n\t\t\t\t\t\tupdate();\n\t\t\t\t\t})();\n\t\t\t\t</script><section><h2 class=\"eyebrow\">Enlazada desde · ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</section><script>\n\t\t\t\t\t// Marca en \"En esta nota\" la sección que se está leyendo y llena la barra según el scroll.\n\t\t\t\t\t(() => {\n\t\t\t\t\t\t// Con la navegación parcial (ADR-009) este script corre en cada nota: suelta los listeners de la anterior.\n\t\t\t\t\t\twindow.scribaLector?.abort();\n\t\t\t\t\t\tconst { signal } = (window.scribaLector = new AbortController());\n\t\t\t\t\t\tconst links = new Map([...document.querySelectorAll(\".aside a.toc\")].map(a => [a.dataset.id, a]));\n\t\t\t\t\t\tconst root = document.querySelector(\".view\");\n\t\t\t\t\t\tconst io = new IntersectionObserver(es => es.forEach(e => {\n\t\t\t\t\t\t\tif (!e.isIntersecting) return;\n\t\t\t\t\t\t\tlinks.forEach(a => a.classList.remove(\"on\"));\n\t\t\t\t\t\t\tconst a = links.get(e.target.id);\n\t\t\t\t\t\t\tif (!a) return;\n\t\t\t\t\t\t\ta.classList.add(\"on\");\n\t\t\t\t\t\t\t// Mantiene el enlace activo visible en el panel; scrollIntoView movería también la nota.\n\t\t\t\t\t\t\tconst aside = a.closest(\".aside\"), ar = aside.getBoundingClientRect(), lr = a.getBoundingClientRect();\n\t\t\t\t\t\t\tif (lr.top < ar.top || lr.bottom > ar.bottom) aside.scrollTop += lr.top - ar.top - ar.height / 2;\n\t\t\t\t\t\t}), { root, rootMargin: \"0px 0px -70% 0px\" });\n\t\t\t\t\t\tdocument.querySelectorAll(\".prose :is(h2, h3)[id]\").forEach(h => links.has(h.id) && io.observe(h));\n\t\t\t\t\t\tsignal.addEventListener(\"abort\", () => io.disconnect());\n\n\t\t\t\t\t\tconst art = document.querySelector(\".reader article\");\n\t\t\t\t\t\tconst bar = document.querySelector(\".aside .read-bar span\");\n\t\t\t\t\t\tconst pct = document.querySelector(\".aside .read-meta .pct\");\n\t\t\t\t\t\tconst update = () => {\n\t\t\t\t\t\t\tconst r = art.getBoundingClientRect(), v = root.getBoundingClientRect();\n\t\t\t\t\t\t\tconst span = r.height - root.clientHeight;\n\t\t\t\t\t\t\tconst p = Math.min(1, Math.max(0, span <= 0 ? 1 : (v.top - r.top) / span));\n\t\t\t\t\t\t\tbar.style.width = (p * 100) + \"%\";\n\t\t\t\t\t\t\tpct.textContent = Math.round(p * 100) + \" %\";\n\t\t\t\t\t\t};\n\t\t\t\t\t\troot.addEventListener(\"scroll\", update, { passive: true, signal });\n\t\t\t\t\t\taddEventListener(\"resize\", update, { signal });\n\t\t\t\t\t\tupdate();\n\t\t\t\t\t})();\n\t\t\t\t</script><section><h2 class=\"eyebrow\">Enlazada desde · ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(len(back)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 96, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 99, Col: 67}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</h2>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "</h2>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(back) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<p class=\"none\">Ninguna nota apunta aquí todavía</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<p class=\"none\">Ninguna nota apunta aquí todavía</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<ul>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<ul>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, b := range back {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<li><a href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<li><a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var16 templ.SafeURL
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(noteHref(ctx, b.Path))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 42}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 105, Col: 42}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "\" title=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\" title=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(b.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 105, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(b.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 71}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 105, Col: 71}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<small>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<small>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(dirOf(b.Path))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 95}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 105, Col: 95}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "</small></a></li>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</small></a></li>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</ul>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</ul>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</section><section><h2 class=\"eyebrow\">Propiedades</h2><dl class=\"props\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</section><section><h2 class=\"eyebrow\">Propiedades</h2><dl class=\"props\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if n.Date != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "<dt>Fecha</dt><dd>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<dt>Fecha</dt><dd>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(n.Date)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 112, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 115, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</dd>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</dd>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "<dt>Palabras</dt><dd>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<dt>Palabras</dt><dd>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(n.Words))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 115, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 118, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</dd></dl></section></aside></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</dd></dl></section></aside></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -436,33 +446,33 @@ func notFoundPage(p string) templ.Component {
 			templ_7745c5c3_Var22 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<div class=\"dash\"><div><div class=\"crumbs\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<div class=\"dash\"><div><div class=\"crumbs\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(p)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 125, Col: 26}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 128, Col: 26}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</div><h1>Esta nota no existe</h1><p class=\"sub\">Puede que se haya movido o que aún no se haya escrito.</p></div><p><a href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</div><h1>Esta nota no existe</h1><p class=\"sub\">Puede que se haya movido o que aún no se haya escrito.</p></div><p><a href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var24 templ.SafeURL
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(kbBase(ctx) + "/"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 129, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 132, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\">Volver a la actividad</a></p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "\">Volver a la actividad</a></p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
