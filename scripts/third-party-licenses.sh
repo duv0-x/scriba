@@ -25,3 +25,7 @@ cp "$asm/LICENSE" "$out/github.com/segmentio/asm/"
 # Fuentes embebidas en la web (SIL OFL 1.1).
 mkdir -p "$out/fonts"
 cp internal/web/static/fonts/LICENSE-*.txt "$out/fonts/"
+
+# Editor en línea (CodeMirror 6 y Lezer, MIT): avisos generados por scripts/codemirror.sh.
+mkdir -p "$out/editor"
+cp internal/web/editor/THIRD_PARTY_LICENSES.txt "$out/editor/"

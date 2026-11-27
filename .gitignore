@@ -5,3 +5,4 @@
 *.db-*
 /tmp/
 /third_party_licenses/
+/internal/web/editor/node_modules/

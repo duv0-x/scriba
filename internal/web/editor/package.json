@@ -1,0 +1,17 @@
+{
+  "name": "scriba-inline-editor",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Editor en línea del lector (ADR-006 / ADR-014): CodeMirror 6 + Live Preview. Se empaqueta con scripts/codemirror.sh.",
+  "dependencies": {
+    "@codemirror/commands": "6.11.2",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@lezer/markdown": "1.8.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
