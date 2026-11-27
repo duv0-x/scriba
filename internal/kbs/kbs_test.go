@@ -351,6 +351,16 @@ func TestCreateYDelete(t *testing.T) {
 	if got := r.List(); !reflect.DeepEqual(got, []string{Fallback}) {
 		t.Fatalf("List tras Delete = %v", got)
 	}
+	// Un token emitido para "a" en carrera con el borrado no vale en la "a" recreada.
+	if err := st.InsertAgentToken("huerfano", "a", []byte("h-huerfano"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Create("a", nil); err != nil {
+		t.Fatal(err)
+	}
+	if tok, ok, err := st.AgentByHash([]byte("h-huerfano")); err != nil || !ok || !tok.Revoked {
+		t.Fatalf("el token huérfano sigue activo en la KB recreada: %+v %v %v", tok, ok, err)
+	}
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}

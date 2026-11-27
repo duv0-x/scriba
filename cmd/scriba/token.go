@@ -62,7 +62,7 @@ func tokenCmd(args []string, stdout, stderr io.Writer) int {
 
 	switch sub {
 	case "create":
-		tok, err := s.Create(name)
+		tok, err := s.Create(name, "")
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1

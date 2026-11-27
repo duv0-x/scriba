@@ -63,7 +63,7 @@ func TestApagadoConStreamMCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, err := (&agents.Store{S: st}).Create("prueba")
+	tok, err := (&agents.Store{S: st}).Create("prueba", "")
 	st.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestServeLayoutViejo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, err := (&agents.Store{S: st}).Create("prueba")
+	tok, err := (&agents.Store{S: st}).Create("prueba", "")
 	st.Close()
 	if err != nil {
 		t.Fatal(err)

@@ -13,6 +13,7 @@ var ErrNameTaken = errors.New("ya existe un token activo con ese nombre")
 type AgentToken struct {
 	ID                int64
 	Name              string
+	KB                string // slug de la KB a la que da acceso
 	Hash              []byte
 	Created, LastUsed time.Time
 	Revoked           bool
@@ -38,9 +39,12 @@ func unixNano(n int64) time.Time {
 	return time.Unix(0, n)
 }
 
-// InsertAgentToken guarda un token nuevo. Un nombre solo se reutiliza si el token anterior
+// kbOrDefault es la expresión SQL del slug de la KB: el dado o, si es "", default_kb.
+const kbOrDefault = "COALESCE(NULLIF(?, ''), (SELECT value FROM settings WHERE key = 'default_kb'), '')"
+
+// InsertAgentToken guarda un token nuevo para la KB kb ("" = la por defecto). Un nombre solo se reutiliza si el token anterior
 // está revocado o es una concesión OAuth caducada (se borra); si no, devuelve ErrNameTaken.
-func (s *Store) InsertAgentToken(name string, hash []byte, created time.Time) error {
+func (s *Store) InsertAgentToken(name, kb string, hash []byte, created time.Time) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -56,7 +60,7 @@ func (s *Store) InsertAgentToken(name string, hash []byte, created time.Time) er
 	if n > 0 {
 		return ErrNameTaken
 	}
-	if _, err := tx.Exec("INSERT INTO agent_tokens(name, hash, created, kb) VALUES(?, ?, ?, COALESCE((SELECT value FROM settings WHERE key = 'default_kb'), ''))", name, hash, created.UnixNano()); err != nil {
+	if _, err := tx.Exec("INSERT INTO agent_tokens(name, hash, created, kb) VALUES(?, ?, ?, "+kbOrDefault+")", name, hash, created.UnixNano(), kb); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -66,8 +70,8 @@ func (s *Store) InsertAgentToken(name string, hash []byte, created time.Time) er
 func (s *Store) AgentByHash(hash []byte) (AgentToken, bool, error) {
 	var a AgentToken
 	var created, used, expires int64
-	err := s.db.QueryRow("SELECT id, name, hash, created, last_used, revoked, client_id, expires FROM agent_tokens WHERE hash = ?", hash).
-		Scan(&a.ID, &a.Name, &a.Hash, &created, &used, &a.Revoked, &a.ClientID, &expires)
+	err := s.db.QueryRow("SELECT id, name, kb, hash, created, last_used, revoked, client_id, expires FROM agent_tokens WHERE hash = ?", hash).
+		Scan(&a.ID, &a.Name, &a.KB, &a.Hash, &created, &used, &a.Revoked, &a.ClientID, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AgentToken{}, false, nil
 	}
@@ -80,7 +84,7 @@ func (s *Store) AgentByHash(hash []byte) (AgentToken, bool, error) {
 
 // ListAgentTokens devuelve todos los tokens, el más reciente primero, sin hashes.
 func (s *Store) ListAgentTokens() ([]AgentToken, error) {
-	rows, err := s.db.Query("SELECT id, name, created, last_used, revoked, client_id, refresh_expires FROM agent_tokens ORDER BY created DESC, id DESC")
+	rows, err := s.db.Query("SELECT id, name, kb, created, last_used, revoked, client_id, refresh_expires FROM agent_tokens ORDER BY created DESC, id DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +93,7 @@ func (s *Store) ListAgentTokens() ([]AgentToken, error) {
 	for rows.Next() {
 		var a AgentToken
 		var created, used, refresh int64
-		if err := rows.Scan(&a.ID, &a.Name, &created, &used, &a.Revoked, &a.ClientID, &refresh); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.KB, &created, &used, &a.Revoked, &a.ClientID, &refresh); err != nil {
 			return nil, err
 		}
 		a.Created, a.LastUsed, a.RefreshExpires = unixNano(created), unixNano(used), unixNano(refresh)

@@ -30,7 +30,7 @@ func consentPage(v consentView) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"setup\"><div><h1>Autorizar conector</h1><p class=\"sub\">Un cliente pide leer y escribir tu base de conocimiento por MCP.</p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"setup\"><div><h1>Autorizar conector</h1><p class=\"sub\">Un cliente pide leer y escribir una de tus bases de conocimiento por MCP.</p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -67,14 +67,14 @@ func consentPage(v consentView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</h2></div><p class=\"desc\">Podrá leer y escribir <b>todas</b> las notas, y volverás a <code>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</h2></div><p class=\"desc\">Podrá leer y escribir <b>todas</b> las notas de la base que elijas, y solo esa, y volverás a <code>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(v.Host)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `oauth.templ`, Line: 18, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `oauth.templ`, Line: 18, Col: 129}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -158,12 +158,20 @@ func consentPage(v consentView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" required pattern=\"[a-z0-9][a-z0-9\\-]{0,39}\" maxlength=\"40\" autocomplete=\"off\" aria-label=\"Nombre del agente\"> <button class=\"btn primary\" type=\"submit\" name=\"decision\" value=\"approve\">Aprobar</button> <button class=\"btn\" type=\"submit\" name=\"decision\" value=\"deny\" formnovalidate>Rechazar</button></form><p class=\"note\">Ese nombre firma sus commits. Si ya hay un conector con él, se reemplaza. Puedes revocarlo en <a href=\"/agentes\">Agentes</a>.</p></section>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\" required pattern=\"[a-z0-9][a-z0-9\\-]{0,39}\" maxlength=\"40\" autocomplete=\"off\" aria-label=\"Nombre del agente\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = kbSelect(v.KBs, v.KB).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<button class=\"btn primary\" type=\"submit\" name=\"decision\" value=\"approve\">Aprobar</button> <button class=\"btn\" type=\"submit\" name=\"decision\" value=\"deny\" formnovalidate>Rechazar</button></form><p class=\"note\">Ese nombre firma sus commits. Si ya hay un conector con él, se reemplaza. Puedes revocarlo en <a href=\"/agentes\">Agentes</a>.</p></section>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -42,6 +42,22 @@ func TestValidName(t *testing.T) {
 	}
 }
 
+func TestVerifyKB(t *testing.T) {
+	st, err := state.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	s := Store{S: st}
+	tok, err := s.Create("codex", "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name, kb, ok := s.Verify(tok); !ok || name != "codex" || kb != "b" {
+		t.Fatalf("Verify con KB = %q %q %v", name, kb, ok)
+	}
+}
+
 func TestVerify(t *testing.T) {
 	dir := t.TempDir()
 	st, err := state.Open(filepath.Join(dir, "state.db"))
@@ -50,15 +66,15 @@ func TestVerify(t *testing.T) {
 	}
 	defer st.Close()
 	s := Store{S: st}
-	if _, err := s.Create("Mal Nombre"); err == nil {
+	if _, err := s.Create("Mal Nombre", ""); err == nil {
 		t.Fatal("aceptó un nombre inválido")
 	}
-	tok, err := s.Create("claude")
+	tok, err := s.Create("claude", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name, ok := s.Verify(tok); !ok || name != "claude" {
-		t.Fatalf("Verify ok = %q %v", name, ok)
+	if name, kb, ok := s.Verify(tok); !ok || name != "claude" || kb != "" {
+		t.Fatalf("Verify ok = %q %q %v", name, kb, ok)
 	}
 	l, _ := s.List()
 	if len(l) != 1 || time.Since(l[0].LastUsed) > time.Minute {
@@ -66,7 +82,7 @@ func TestVerify(t *testing.T) {
 	}
 	otro, _ := Generate()
 	for _, bad := range []string{otro, tok[len(Prefix):], "xxx_" + tok[len(Prefix):], tok + "a", ""} {
-		if _, ok := s.Verify(bad); ok {
+		if _, _, ok := s.Verify(bad); ok {
 			t.Errorf("Verify aceptó %q", bad)
 		}
 	}
@@ -93,7 +109,7 @@ func TestVerify(t *testing.T) {
 	if ok, err := s.Revoke("claude"); !ok || err != nil {
 		t.Fatalf("Revoke: %v %v", ok, err)
 	}
-	if _, ok := s.Verify(tok); ok {
+	if _, _, ok := s.Verify(tok); ok {
 		t.Fatal("Verify aceptó un token revocado")
 	}
 }
