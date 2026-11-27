@@ -17,10 +17,10 @@ func kindleNoteEnv(t *testing.T) *setupEnv {
 	t.Helper()
 	e := newSetupServer(t)
 	nota := "---\ntitle: \"Nota de prueba\"\ndate: \"2026-11-25\"\n---\n\n# Nota de prueba\n\nHola [[otra]] y [web](https://example.com).\n"
-	if err := os.WriteFile(filepath.Join(e.srv.V.Root, "nota.md"), []byte(nota), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(e.kb.V.Root, "nota.md"), []byte(nota), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.srv.Ix.Rebuild(e.srv.V); err != nil {
+	if err := e.kb.Ix.Rebuild(e.kb.V); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.srv.State.SetSetting("initialized", "1"); err != nil {
@@ -154,17 +154,17 @@ func TestKindleConservaKey(t *testing.T) {
 func TestKindleBotonSoloConConector(t *testing.T) {
 	e := kindleNoteEnv(t)
 
-	_, body := get(t, e.h, "/n/nota.md", nil)
+	_, body := get(t, e.h, "/k/principal/n/nota.md", nil)
 	if strings.Contains(body, "Enviar a Kindle") {
 		t.Error("el botón aparece sin conector configurado")
 	}
 
 	saveKindle(t, e, "re_SECRETA_123")
-	_, body = get(t, e.h, "/n/nota.md", nil)
+	_, body = get(t, e.h, "/k/principal/n/nota.md", nil)
 	if !strings.Contains(body, "Enviar a Kindle") {
 		t.Error("el botón no aparece con el conector configurado")
 	}
-	if !strings.Contains(body, `hx-post="/kindle/nota.md"`) {
+	if !strings.Contains(body, `hx-post="/k/principal/kindle/nota.md"`) {
 		t.Error("el botón no apunta a /kindle/nota.md")
 	}
 }
@@ -175,7 +175,7 @@ func TestKindleEnviar(t *testing.T) {
 	ts, got := fakeResend(t, http.StatusOK, `{"id":"x"}`)
 	e.srv.KindleEndpoint = ts.URL
 
-	res, body := post(t, e.h, "/kindle/nota.md", nil, nil)
+	res, body := post(t, e.h, "/k/principal/kindle/nota.md", nil, nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("got %d, want 200", res.StatusCode)
 	}
@@ -201,7 +201,7 @@ func TestKindleEnviarError403(t *testing.T) {
 	ts, _ := fakeResend(t, http.StatusForbidden, `{"message":"The domain is not verified"}`)
 	e.srv.KindleEndpoint = ts.URL
 
-	res, body := post(t, e.h, "/kindle/nota.md", nil, nil)
+	res, body := post(t, e.h, "/k/principal/kindle/nota.md", nil, nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("got %d, want 200", res.StatusCode)
 	}
@@ -218,23 +218,23 @@ func TestKindleEnviarError403(t *testing.T) {
 func TestKindleRutas(t *testing.T) {
 	e := kindleNoteEnv(t)
 
-	res, _ := get(t, e.h, "/kindle/nota.md", nil)
+	res, _ := get(t, e.h, "/k/principal/kindle/nota.md", nil)
 	if res.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("GET /kindle/nota.md: got %d, want 405", res.StatusCode)
 	}
 
-	res, body := post(t, e.h, "/kindle/nota.md", nil, nil)
+	res, body := post(t, e.h, "/k/principal/kindle/nota.md", nil, nil)
 	if res.StatusCode != http.StatusOK || !strings.Contains(body, "no está configurado") {
 		t.Errorf("sin conector: got %d, want 200 con aviso; body: %s", res.StatusCode, body)
 	}
 
 	saveKindle(t, e, "re_SECRETA_123")
-	res, _ = post(t, e.h, "/kindle/no-existe.md", nil, nil)
+	res, _ = post(t, e.h, "/k/principal/kindle/no-existe.md", nil, nil)
 	if res.StatusCode != http.StatusNotFound {
 		t.Errorf("nota inexistente: got %d, want 404", res.StatusCode)
 	}
 
-	res, _ = post(t, e.h, "/kindle/nota.md", nil, map[string]string{"Sec-Fetch-Site": "cross-site"})
+	res, _ = post(t, e.h, "/k/principal/kindle/nota.md", nil, map[string]string{"Sec-Fetch-Site": "cross-site"})
 	if res.StatusCode != http.StatusForbidden {
 		t.Errorf("cross-site: got %d, want 403", res.StatusCode)
 	}

@@ -39,7 +39,7 @@ Dark is a re-tuned palette, never an inversion.
 - Elevation: flat. Borders (1px `line`) separate regions. A single soft shadow only for floating layers (search results, menus).
 
 ## Layout
-- App shell: left sidebar 248px (brand, views, note types with counts, file tree in mono) · main column · top bar with search.
+- App shell: left sidebar 248px (brand, knowledge-base selector, views, note types with counts, file tree in mono) · main column · top bar with search.
 - Under 720px, a 44×44px menu button opens the same sidebar as a left non-modal popover drawer: `min(84vw, 320px)` wide, full height, `paper` background, right hairline and a 28% dark backdrop. Light dismiss, Escape and navigation close it; no swipe or slide animation. Graph filters use the same pattern and 44×44px trigger.
 - Note reader: reading column (max 68ch) + right context rail 240px (outline "In this note", backlinks "Linked from", properties: date, author agent, words, reading time). Rail collapses below the article under 1000px.
 - Dashboard: summary tiles row (Notes, Words, Indexed, Disk) → contribution heatmap (52 weeks × 7 days, 11px cells, 5 accent steps) → two columns: recent activity by agent, storage breakdown bar with legend. Under 720px the heatmap opens on the current week and remains a named, keyboard-scrollable region; desktop alignment is unchanged.
@@ -51,6 +51,7 @@ Dark is a re-tuned palette, never an inversion.
 - **Unread dot:** 7px accent dot next to a file in the tree (VS Code style); pulsing scribe-colored dot while an agent is writing.
 - **Change marker:** new blocks since last read get a 3px accent bar in the left margin and a 7% accent wash; banner above the note: "Changes since your last read · Mark as read".
 - **Agent presence badge:** pill with a 22px round avatar in `scribe` color + "Claude Code is editing journal/2026-11-16.md"; live caret in `scribe` color at the end of the text being written.
+- **Knowledge-base selector:** a native disclosure under the brand, with a "Base" eyebrow. The summary is a full-width `surface` row with a 1px `line` border, 8px radius, the current slug in mono 13px and a `muted` chevron that flips when open. The list sits in flow below it, in `.nav` style: the current base is in `accent-soft`/`accent`, and "Gestionar bases" is muted and set apart by a hairline. Switching bases is a full page load, because partial navigation keeps the sidebar.
 - **Search (⌘K):** input with leading icon and kbd hint; floating results list with title, mono path, and snippet with highlighted match.
 - **Chips:** note type in accent-soft; tags as outlined muted pills prefixed with #.
 - **Buttons:** primary = solid accent with surface-colored text; secondary = surface with 1px line border, accent on hover.

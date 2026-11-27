@@ -140,16 +140,9 @@ func runServe(ctx context.Context, o serveOpts) error {
 	az.Register(mux)
 	// Hasta #47 el MCP sirve la KB por defecto del Registry.
 	mux.Handle("/mcp", mcp.Handler(mcp.Config{V: def.V, Ix: def.Ix, W: def.W, Agents: ag, PublicURL: o.publicURL, Version: version}))
-	// Hasta #46 la web sirve la KB por defecto.
 	mux.Handle("/", (&web.Server{
-		V: def.V, Ix: def.Ix, KB: def.Slug, State: st, Key: key, Agents: ag, OAuth: az, PublicURL: o.publicURL,
-		Bus: def.Bus, Presence: def.Presence, W: def.W,
+		KBs: reg, State: st, Key: key, Agents: ag, OAuth: az, PublicURL: o.publicURL,
 		GitHub: github.New(), Git: web.GitVault{}, ClientID: o.clientID,
-		OnImported: func() {
-			if err := def.Reindex(); err != nil {
-				slog.Error("reconstruir índice tras importar", "kb", def.Slug, "err", err)
-			}
-		},
 	}).Handler())
 	// Shutdown no corta las peticiones en curso: los streams GET/SSE del SDK MCP viven
 	// hasta que se cancela su contexto, y baseCtx se cancela al empezar el apagado.

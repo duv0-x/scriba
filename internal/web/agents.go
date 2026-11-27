@@ -60,7 +60,7 @@ func (s *Server) renderAgents(w http.ResponseWriter, r *http.Request, status int
 		return
 	}
 	v.Tokens = toks
-	sh, err := s.shellFor(r, "")
+	sh, err := s.at(r).shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
 		return

@@ -87,7 +87,7 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 				return templ_7745c5c3_Err
 			}
 			if kindle {
-				templ_7745c5c3_Err = kindleButton(kindleAction(n.Path), "Enviar a Kindle").Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = kindleButton(kindleHref(ctx, n.Path), "Enviar a Kindle").Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -98,9 +98,9 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var5 templ.SafeURL
-				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(editHref(n.Path))
+				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(editHref(ctx, n.Path))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 24, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 24, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -314,9 +314,9 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var16 templ.SafeURL
-				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(noteHref(b.Path))
+				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(noteHref(ctx, b.Path))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 37}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 42}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -329,7 +329,7 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(b.Path)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 54}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 				if templ_7745c5c3_Err != nil {
@@ -342,7 +342,7 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(b.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 66}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 71}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
@@ -355,7 +355,7 @@ func readerPage(n *vault.Note, body template.HTML, headings []render.Heading, ba
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(dirOf(b.Path))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 90}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 102, Col: 95}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
@@ -449,7 +449,20 @@ func notFoundPage(p string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</div><h1>Esta nota no existe</h1><p class=\"sub\">Puede que se haya movido o que aún no se haya escrito.</p></div><p><a href=\"/\">Volver a la actividad</a></p></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</div><h1>Esta nota no existe</h1><p class=\"sub\">Puede que se haya movido o que aún no se haya escrito.</p></div><p><a href=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var24 templ.SafeURL
+		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(kbBase(ctx) + "/"))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `reader.templ`, Line: 129, Col: 47}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\">Volver a la actividad</a></p></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

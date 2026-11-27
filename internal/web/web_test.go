@@ -5,12 +5,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/render"
 	"github.com/duv0-x/scriba/internal/vault"
 )
@@ -29,7 +31,7 @@ func newServer(t *testing.T) http.Handler {
 	if err := ix.Rebuild(v); err != nil {
 		t.Fatal(err)
 	}
-	return (&Server{V: v, Ix: ix}).Handler()
+	return (&Server{KBs: oneKB(&kbs.KB{V: v, Ix: ix})}).Handler()
 }
 
 func get(t *testing.T, h http.Handler, target string, hdr map[string]string) (*http.Response, string) {
@@ -52,20 +54,20 @@ func TestRoutes(t *testing.T) {
 		status       int
 		has, hasNot  []string
 	}{
-		{name: "nota con backlink", target: "/n/decisions/personal/adr-001.md", status: 200,
-			has: []string{"ADR-001 · Markdown plano", `href="/n/journal/2026-11-16.md"`, "Enlazada desde · 1"}},
-		{name: "wikilinks", target: "/n/journal/2026-11-16.md", status: 200,
-			has: []string{`class="wl missing"`, `href="/n/decisions/personal/adr-001.md"`}},
-		{name: "fuera del vault codificada", target: "/n/..%2F..%2Fetc%2Fpasswd", status: 400, hasNot: []string{"root:"}},
-		{name: "directorio oculto", target: "/n/.git/config", status: 404},
-		{name: "no existe", target: "/n/no-existe.md", status: 404, has: []string{"Esta nota no existe", "<html"}},
-		{name: "búsqueda htmx", target: "/buscar?q=configuracion", hdr: map[string]string{"HX-Request": "true"}, status: 200,
+		{name: "nota con backlink", target: "/k/principal/n/decisions/personal/adr-001.md", status: 200,
+			has: []string{"ADR-001 · Markdown plano", `href="/k/principal/n/journal/2026-11-16.md"`, "Enlazada desde · 1"}},
+		{name: "wikilinks", target: "/k/principal/n/journal/2026-11-16.md", status: 200,
+			has: []string{`class="wl missing"`, `class="wl" href="/k/principal/n/decisions/personal/adr-001.md"`}},
+		{name: "fuera del vault codificada", target: "/k/principal/n/..%2F..%2Fetc%2Fpasswd", status: 400, hasNot: []string{"root:"}},
+		{name: "directorio oculto", target: "/k/principal/n/.git/config", status: 404},
+		{name: "no existe", target: "/k/principal/n/no-existe.md", status: 404, has: []string{"Esta nota no existe", "<html"}},
+		{name: "búsqueda htmx", target: "/k/principal/buscar?q=configuracion", hdr: map[string]string{"HX-Request": "true"}, status: 200,
 			has: []string{"<mark>"}, hasNot: []string{"<html"}},
-		{name: "búsqueda página", target: "/buscar?q=configuracion", status: 200, has: []string{"<html", "<mark>"}},
-		{name: "sin resultados", target: "/buscar?q=zzzz", hdr: map[string]string{"HX-Request": "true"}, status: 200,
+		{name: "búsqueda página", target: "/k/principal/buscar?q=configuracion", status: 200, has: []string{"<html", "<mark>"}},
+		{name: "sin resultados", target: "/k/principal/buscar?q=zzzz", hdr: map[string]string{"HX-Request": "true"}, status: 200,
 			has: []string{"Sin resultados para “zzzz”."}},
 		{name: "readyz", target: "/readyz", status: 200, has: []string{"ok"}},
-		{name: "inicio", target: "/", status: 200, has: []string{"Notas por día", "Actividad de la base de conocimiento"}},
+		{name: "inicio", target: "/k/principal/", status: 200, has: []string{"Notas por día", "Actividad de la base de conocimiento"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -88,8 +90,100 @@ func TestRoutes(t *testing.T) {
 }
 
 // El ServeMux limpia los ".." y redirige: nunca debe servir contenido de fuera.
+func TestLegacyRedirects(t *testing.T) {
+	h := newServer(t)
+	for _, tt := range []struct {
+		method, target, want string
+		code                 int
+	}{
+		{http.MethodGet, "/n/README.md?x=1", "/k/principal/n/README.md?x=1", http.StatusMovedPermanently},
+		{http.MethodGet, "/", "/k/principal/", http.StatusMovedPermanently},
+		{http.MethodPost, "/vista-previa", "/k/principal/vista-previa", http.StatusPermanentRedirect},
+	} {
+		req := httptest.NewRequest(tt.method, tt.target, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		res := rec.Result()
+		if res.StatusCode != tt.code || res.Header.Get("Location") != tt.want {
+			t.Errorf("%s %s = %d, Location %q; quiero %d, %q", tt.method, tt.target, res.StatusCode, res.Header.Get("Location"), tt.code, tt.want)
+		}
+	}
+}
+
+func TestKBSelection(t *testing.T) {
+	h := newServer(t)
+	if res, _ := get(t, h, "/k/noexiste/", nil); res.StatusCode != http.StatusNotFound {
+		t.Errorf("KB inexistente = %d; quiero 404", res.StatusCode)
+	}
+	// Una petición de fondo (SSE, JSON) no cambia la última KB visitada.
+	if res, _ := get(t, h, "/k/principal/api/grafo", nil); len(res.Cookies()) != 0 {
+		t.Errorf("/api/grafo fijó cookies: %v", res.Cookies())
+	}
+	res, _ := get(t, h, "/k/principal/", map[string]string{"Accept": "text/html"})
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("KB existente = %d; quiero 200", res.StatusCode)
+	}
+	var cookie *http.Cookie
+	for _, c := range res.Cookies() {
+		if c.Name == "scriba_kb" {
+			cookie = c
+		}
+	}
+	if cookie == nil || cookie.Value != "principal" {
+		t.Errorf("cookie de KB = %v; quiero scriba_kb=principal", cookie)
+	}
+}
+
+func TestSearchUsesRequestKB(t *testing.T) {
+	newKB := func(slug, title, body string) *kbs.KB {
+		t.Helper()
+		dir := t.TempDir()
+		v, err := vault.Open(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "nota.md"), []byte("# "+title+"\n\n"+body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		ix, err := index.Open(filepath.Join(t.TempDir(), "scriba.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = ix.Close() })
+		if err := ix.Rebuild(v); err != nil {
+			t.Fatal(err)
+		}
+		return &kbs.KB{Slug: slug, V: v, Ix: ix}
+	}
+	principal := newKB("principal", "Nota principal", "palabraunicaparabuscar")
+	otra := newKB("otra", "Nota alterna", "contenido distinto")
+	h := (&Server{KBs: &fakeKBs{list: []*kbs.KB{principal, otra}}}).Handler()
+
+	_, body := get(t, h, "/k/otra/buscar?q=palabraunicaparabuscar", nil)
+	if strings.Contains(body, "Nota principal") {
+		t.Error("la búsqueda de otra KB devolvió la nota de principal")
+	}
+	_, body = get(t, h, "/k/principal/buscar?q=palabraunicaparabuscar", nil)
+	if !strings.Contains(body, "Nota principal") {
+		t.Error("la búsqueda de principal no devolvió su nota")
+	}
+
+	// Selector de KB: la actual en el summary y marcada; las demás con navegación completa.
+	_, body = get(t, h, "/k/principal/", nil)
+	for _, want := range []string{
+		`<summary aria-describedby="kbsel-h"><code>principal</code>`,
+		`href="/k/otra/" hx-boost="false"><code>otra</code>`,
+		`href="/k/principal/" hx-boost="false" aria-current="page"`,
+		`href="/kbs"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("falta %q en el selector", want)
+		}
+	}
+}
+
 func TestTraversalSinCodificar(t *testing.T) {
-	res, body := get(t, newServer(t), "/n/../../etc/passwd", nil)
+	res, body := get(t, newServer(t), "/k/principal/n/../../etc/passwd", nil)
 	if res.StatusCode == http.StatusOK || strings.Contains(body, "root:") {
 		t.Fatalf("status %d sirve contenido de fuera", res.StatusCode)
 	}
@@ -125,7 +219,7 @@ func sideHTML(t *testing.T, body string) string {
 
 func TestSidebarTree(t *testing.T) {
 	h := newServer(t)
-	_, body := get(t, h, "/n/decisions/personal/adr-001.md", nil)
+	_, body := get(t, h, "/k/principal/n/decisions/personal/adr-001.md", nil)
 	side := sideHTML(t, body)
 	for _, s := range []string{
 		`<details open><summary title="decisions">`,
@@ -141,7 +235,7 @@ func TestSidebarTree(t *testing.T) {
 		t.Error("la sidebar muestra el nombre de archivo en vez del título")
 	}
 
-	_, body = get(t, h, "/", nil)
+	_, body = get(t, h, "/k/principal/", nil)
 	if side := sideHTML(t, body); strings.Contains(side, "<details open") || !strings.Contains(side, "<details") {
 		t.Errorf("en la home todo debe ir plegado:\n%s", side)
 	}

@@ -266,8 +266,10 @@ func (r *Registry) List() []string {
 // Err entrega el error del primer watcher que muere: el proceso debe apagarse.
 func (r *Registry) Err() <-chan error { return r.errc }
 
-// Create crea una KB con la plantilla inicial y su propio repositorio git.
-func (r *Registry) Create(slug string) (*KB, error) {
+// Create crea una KB y su propio repositorio git. fill llena el vault (que aún no existe)
+// antes del primer commit; nil = la plantilla inicial (onboarding.Scaffold). Si algo falla,
+// no queda nada en disco.
+func (r *Registry) Create(slug string, fill func(vaultDir string) error) (*KB, error) {
 	if !ValidSlug(slug) {
 		return nil, ErrInvalidSlug
 	}
@@ -296,7 +298,10 @@ func (r *Registry) Create(slug string) (*KB, error) {
 		}
 	}()
 	vaultDir := filepath.Join(dir, "vault")
-	if err := onboarding.Scaffold(vaultDir); err != nil {
+	if fill == nil {
+		fill = onboarding.Scaffold
+	}
+	if err := fill(vaultDir); err != nil {
 		return nil, err
 	}
 	if err := gitvault.Init(vaultDir); err != nil {

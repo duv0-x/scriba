@@ -7,7 +7,7 @@ import (
 
 func TestThemeToggle(t *testing.T) {
 	h := newServer(t)
-	_, page := get(t, h, "/", nil)
+	_, page := get(t, h, "/k/principal/", nil)
 	if !strings.Contains(page, `id="tema"`) {
 		t.Error(`falta el botón id="tema"`)
 	}

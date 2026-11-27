@@ -5,7 +5,8 @@
   const TIPOS = ["journal", "tickets", "decisions", "runbooks", "references", "postmortems"];
   const grupo = (t) => (TIPOS.includes(t) ? t : "otras");
   const still = matchMedia("(prefers-reduced-motion: reduce)");
-  const href = (p) => "/n/" + p.split("/").map(encodeURIComponent).join("/");
+  const base = document.body.dataset.base || "";
+  const href = (p) => base + "/n/" + p.split("/").map(encodeURIComponent).join("/");
   const MIN_ALPHA = 0.01;
 
   // Presencia: la reenvía live.js (única conexión SSE de la pestaña) como "scriba:presence".

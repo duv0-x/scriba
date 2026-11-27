@@ -94,16 +94,16 @@ func TestPublicURLDesdePeticion(t *testing.T) {
 func TestUltimoPush(t *testing.T) {
 	e := newSetupServer(t)
 	connect(t, e)
-	c, _, _ := e.srv.State.KBConnector("github", e.srv.KB)
+	c, _, _ := e.srv.State.KBConnector("github", e.kb.Slug)
 	c.Repo = "duv0-x/ia-kb"
-	if err := e.srv.State.SaveKBConnector(e.srv.KB, c); err != nil {
+	if err := e.srv.State.SaveKBConnector(e.kb.Slug, c); err != nil {
 		t.Fatal(err)
 	}
 	if _, body := get(t, e.h, "/conectores", nil); !strings.Contains(body, "Último push") || !strings.Contains(body, "aún no") || strings.Contains(body, "Se activa cuando") {
 		t.Fatalf("sin push:\n%s", body)
 	}
 	c.LastPush, c.LastError = "2026-11-16 10:00", "rechazado por el remoto"
-	if err := e.srv.State.SaveKBConnector(e.srv.KB, c); err != nil {
+	if err := e.srv.State.SaveKBConnector(e.kb.Slug, c); err != nil {
 		t.Fatal(err)
 	}
 	if _, body := get(t, e.h, "/conectores", nil); !strings.Contains(body, "2026-11-16 10:00") || !strings.Contains(body, `class="bad">rechazado por el remoto`) {

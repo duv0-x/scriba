@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,9 +15,47 @@ import (
 	"github.com/duv0-x/scriba/internal/github"
 	"github.com/duv0-x/scriba/internal/gitvault"
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
 )
+
+const testKB = "principal"
+
+// fakeKBs es un Registry de tests: la primera KB es la por defecto; no crea ni borra.
+type fakeKBs struct{ list []*kbs.KB }
+
+func oneKB(k *kbs.KB) *fakeKBs {
+	if k.Slug == "" {
+		k.Slug = testKB
+	}
+	return &fakeKBs{list: []*kbs.KB{k}}
+}
+
+func (f *fakeKBs) Get(slug string) (*kbs.KB, bool) {
+	for _, k := range f.list {
+		if k.Slug == slug {
+			return k, true
+		}
+	}
+	return nil, false
+}
+
+func (f *fakeKBs) Default() *kbs.KB { return f.list[0] }
+
+func (f *fakeKBs) List() []string {
+	out := make([]string, len(f.list))
+	for i, k := range f.list {
+		out[i] = k.Slug
+	}
+	return out
+}
+
+func (f *fakeKBs) Create(string, func(string) error) (*kbs.KB, error) {
+	return nil, errors.New("fakeKBs: no soportado")
+}
+
+func (f *fakeKBs) Delete(string) error { return errors.New("fakeKBs: no soportado") }
 
 type fakeGitHub struct {
 	pollErr error
@@ -74,11 +113,11 @@ func (f *fakeGit) CommitAll(string, string, string) (string, bool, error) {
 }
 
 type setupEnv struct {
-	h        http.Handler
-	srv      *Server
-	gh       *fakeGitHub
-	git      *fakeGit
-	imported int
+	h   http.Handler
+	srv *Server
+	kb  *kbs.KB
+	gh  *fakeGitHub
+	git *fakeGit
 }
 
 // newSetupServer arma un Server con vault vacío, índice vacío y State real.
@@ -107,8 +146,9 @@ func newSetupServer(t *testing.T) *setupEnv {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	e := &setupEnv{gh: &fakeGitHub{token: "gho_TOKENSECRETO"}, git: &fakeGit{}}
-	e.srv = &Server{V: v, Ix: ix, State: st, Key: bytes.Repeat([]byte{7}, 32),
-		GitHub: e.gh, Git: e.git, ClientID: "cid", OnImported: func() { e.imported++ }}
+	e.kb = &kbs.KB{V: v, Ix: ix}
+	e.srv = &Server{KBs: oneKB(e.kb), State: st, Key: bytes.Repeat([]byte{7}, 32),
+		GitHub: e.gh, Git: e.git, ClientID: "cid"}
 	e.h = e.srv.Handler()
 	return e
 }

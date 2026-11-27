@@ -10,7 +10,7 @@ templ searchResults(q string, hits []index.Hit) {
 		} else {
 			<div class="hits">
 				for _, h := range hits {
-					<a href={ noteHref(h.Path) }>
+					<a href={ noteHref(ctx, h.Path) }>
 						<b>{ h.Title }</b>
 						<code>{ h.Path }</code>
 						<small>

@@ -19,6 +19,7 @@ import (
 
 	"github.com/duv0-x/scriba/internal/github"
 	"github.com/duv0-x/scriba/internal/gitvault"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/onboarding"
 	"github.com/duv0-x/scriba/internal/secrets"
 	"github.com/duv0-x/scriba/internal/state"
@@ -107,7 +108,6 @@ func (s *Server) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /conectores/kindle", s.kindleSave)
 	mux.HandleFunc("POST /conectores/kindle/prueba", s.kindleTest)
 	mux.HandleFunc("POST /conectores/kindle/desconectar", s.kindleDisconnect)
-	mux.HandleFunc("POST /kindle/{path...}", s.kindleNote)
 }
 
 // sameOrigin es la defensa CSRF de los POST: sin cookies de sesión en el MVP (la instancia va tras Access).
@@ -157,28 +157,31 @@ func (s *Server) initialized() (bool, error) {
 	if v, _, err := s.State.Setting(settingInitialized); err != nil || v == "1" {
 		return v == "1", err
 	}
-	n, err := s.Ix.NoteCount()
+	n, err := s.KBs.Default().Ix.NoteCount()
 	return n > 0, err
 }
 
-// markImported cierra la creación/importación: marca la base, reinicia los baselines de "sin
-// leer" (las notas importadas no son novedades) y avisa para reindexar.
-func (s *Server) markImported() error {
-	if err := s.State.SetSetting(settingInitialized, "1"); err != nil {
-		return err
+// markImported cierra la creación/importación de k y la reindexa. Si k es la KB por defecto
+// además la marca inicializada (fin de la bienvenida) y reinicia los baselines de "sin leer"
+// (las notas importadas no son novedades).
+func (s *Server) markImported(k *kbs.KB) error {
+	if k.Slug == s.KBs.Default().Slug {
+		if err := s.State.SetSetting(settingInitialized, "1"); err != nil {
+			return err
+		}
+		if err := s.State.ClearBaselines(); err != nil {
+			return err
+		}
 	}
-	if err := s.State.ClearBaselines(); err != nil {
-		return err
-	}
-	if s.OnImported != nil {
-		s.OnImported()
+	if err := k.Reindex(); err != nil {
+		slog.Error("reconstruir índice tras importar", "kb", k.Slug, "err", err)
 	}
 	return nil
 }
 
 // vaultEmpty: el directorio del vault no tiene nada (salvo .DS_Store), que es lo que exigen Scaffold, ImportZip y Clone.
-func (s *Server) vaultEmpty() bool {
-	ents, err := os.ReadDir(s.V.Root)
+func vaultEmpty(root string) bool {
+	ents, err := os.ReadDir(root)
 	if err != nil {
 		return os.IsNotExist(err)
 	}
@@ -192,7 +195,7 @@ func (s *Server) vaultEmpty() bool {
 
 // initRepo deja el vault como repo git con un commit inicial.
 func (s *Server) initRepo() error {
-	root := s.V.Root
+	root := s.KBs.Default().V.Root
 	if !s.Git.IsRepo(root) {
 		if err := s.Git.Init(root); err != nil {
 			return err
@@ -207,7 +210,7 @@ func (s *Server) welcome(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderWelcome(w http.ResponseWriter, r *http.Request, status int, msg string) {
-	sh, err := s.shellFor(r, "")
+	sh, err := s.at(r).shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
 		return
@@ -219,7 +222,7 @@ func (s *Server) renderWelcome(w http.ResponseWriter, r *http.Request, status in
 func (s *Server) welcomeNew(w http.ResponseWriter, r *http.Request) {
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	err := onboarding.Scaffold(s.V.Root) // Scaffold rechaza un vault con contenido
+	err := onboarding.Scaffold(s.KBs.Default().V.Root) // Scaffold rechaza un vault con contenido
 	if errors.Is(err, onboarding.ErrNotEmpty) {
 		s.renderWelcome(w, r, http.StatusConflict, "La base ya tiene notas.")
 		return
@@ -228,13 +231,13 @@ func (s *Server) welcomeNew(w http.ResponseWriter, r *http.Request) {
 		err = s.initRepo()
 	}
 	if err == nil {
-		err = s.markImported()
+		err = s.markImported(s.KBs.Default())
 	}
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/k/"+s.KBs.Default().Slug+"/", http.StatusSeeOther)
 }
 
 func (s *Server) welcomeZip(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +261,7 @@ func (s *Server) welcomeZip(w http.ResponseWriter, r *http.Request) {
 
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	res, err := onboarding.ImportZip(f, hdr.Size, s.V.Root) // ImportZip rechaza un vault con contenido
+	res, err := onboarding.ImportZip(f, hdr.Size, s.KBs.Default().V.Root) // ImportZip rechaza un vault con contenido
 	switch {
 	case errors.Is(err, onboarding.ErrNotEmpty):
 		s.renderWelcome(w, r, http.StatusConflict, "La base ya tiene notas.")
@@ -272,30 +275,39 @@ func (s *Server) welcomeZip(w http.ResponseWriter, r *http.Request) {
 		err = s.initRepo()
 	}
 	if err == nil {
-		err = s.markImported()
+		err = s.markImported(s.KBs.Default())
 	}
 	if err != nil {
 		serverError(w, err)
 		return
 	}
 	if res.DroppedGit {
-		http.Redirect(w, r, "/?aviso=historial", http.StatusSeeOther)
+		http.Redirect(w, r, "/k/"+s.KBs.Default().Slug+"/?aviso=historial", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/k/"+s.KBs.Default().Slug+"/", http.StatusSeeOther)
 }
 
-// ghView son los datos de la tarjeta de GitHub.
+// ghView son los datos de la tarjeta de GitHub: la cuenta es de la instancia; repo y push, de cada KB.
 type ghView struct {
-	Conn       state.Connector
+	Conn       state.Connector // solo la cuenta (Account)
 	Connected  bool
 	Wait       *pendingDevice
-	Repos      []github.Repo
-	Branch     string
-	VaultEmpty bool
+	Repos      []github.Repo // se piden una vez, si alguna KB no tiene repo
+	KBs        []ghKBView
+	VaultEmpty bool // de la KB por defecto: decide si se ofrece subir un .zip
 	NoClientID bool
 	Msg        string
 	Kindle     kindleView
+}
+
+// ghKBView es la parte de GitHub de una KB: repo destino, push y último resultado.
+type ghKBView struct {
+	Slug       string
+	Default    bool
+	Conn       state.Connector // Repo, Push, LastPush y LastError de esta KB
+	Branch     string
+	VaultEmpty bool
 }
 
 func (s *Server) connectors(w http.ResponseWriter, r *http.Request) {
@@ -303,7 +315,8 @@ func (s *Server) connectors(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderConnectors(w http.ResponseWriter, r *http.Request, status int, msg string) {
-	v := ghView{VaultEmpty: s.vaultEmpty(), NoClientID: s.ClientID == "", Msg: msg}
+	def := s.KBs.Default()
+	v := ghView{VaultEmpty: vaultEmpty(def.V.Root), NoClientID: s.ClientID == "", Msg: msg}
 	c, ok, tok, err := s.ghToken()
 	if err != nil {
 		serverError(w, err)
@@ -312,15 +325,32 @@ func (s *Server) renderConnectors(w http.ResponseWriter, r *http.Request, status
 	switch {
 	case ok:
 		v.Conn, v.Connected = c, true
-		if c.Repo == "" {
+		needRepos := false
+		for _, slug := range s.KBs.List() {
+			k, found := s.KBs.Get(slug)
+			if !found {
+				continue // se borró mientras se listaba
+			}
+			kc, _, err := s.State.KBConnector(connGitHub, slug)
+			if err != nil {
+				serverError(w, err)
+				return
+			}
+			kv := ghKBView{Slug: slug, Default: slug == def.Slug, Conn: kc, VaultEmpty: vaultEmpty(k.V.Root)}
+			if kc.Repo == "" {
+				needRepos = true
+			} else {
+				kv.Branch = branchOf(k.V.Root)
+			}
+			v.KBs = append(v.KBs, kv)
+		}
+		if needRepos {
 			repos, err := s.GitHub.Repos(r.Context(), tok)
 			if err != nil {
 				slog.Error("web: github repos", "err", err)
 				v.Msg = "No pudimos listar tus repositorios de GitHub. Recarga la página para intentarlo de nuevo."
 			}
 			v.Repos = repos
-		} else {
-			v.Branch = branchOf(s.V.Root)
 		}
 	default:
 		s.mu.Lock()
@@ -336,7 +366,7 @@ func (s *Server) renderConnectors(w http.ResponseWriter, r *http.Request, status
 		return
 	}
 	v.Kindle = kindleView{To: kc.Account, From: kc.Repo, Active: active}
-	sh, err := s.shellFor(r, "")
+	sh, err := s.at(r).shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
 		return
@@ -345,9 +375,9 @@ func (s *Server) renderConnectors(w http.ResponseWriter, r *http.Request, status
 	page(w, r, status, layout(sh, "Conectores · Scriba", connectorsPage(v)))
 }
 
-// ghToken devuelve el conector de GitHub con su token descifrado; el token no debe salir del handler que lo pide.
+// ghToken devuelve la cuenta de GitHub (de la instancia) con su token descifrado; el token no debe salir del handler que lo pide.
 func (s *Server) ghToken() (state.Connector, bool, string, error) {
-	c, ok, err := s.State.KBConnector(connGitHub, s.KB)
+	c, ok, err := s.State.Connector(connGitHub)
 	if err != nil || !ok {
 		return c, false, "", err
 	}
@@ -388,7 +418,7 @@ func (s *Server) ghPoll(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	if d.deviceCode == "" {
 		// Otra pestaña ya completó la conexión: que esta recargue en vez de mostrar un error.
-		if _, ok, err := s.State.KBConnector(connGitHub, s.KB); err == nil && ok {
+		if _, ok, err := s.State.Connector(connGitHub); err == nil && ok {
 			w.Header().Set("HX-Redirect", "/conectores")
 			w.WriteHeader(http.StatusOK)
 			return
@@ -439,7 +469,8 @@ func (s *Server) ghPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	sealed, err := secrets.Seal(s.Key, []byte(tok.AccessToken))
 	if err == nil {
-		err = s.State.SaveKBConnector(s.KB, state.Connector{Name: connGitHub, Account: login, Secret: sealed, Push: true})
+		// Solo la cuenta: el repo y el push de cada KB se configuran aparte (kb_connectors).
+		err = s.State.SaveConnector(state.Connector{Name: connGitHub, Account: login, Secret: sealed, Push: true})
 	}
 	s.clearDevice()
 	if err != nil {
@@ -460,7 +491,20 @@ func (s *Server) clearDevice() {
 // repoName valida owner/nombre de GitHub antes de meterlo en una URL.
 var repoName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
+// formKB es la KB que nombra el campo kb de un formulario de Conectores; si no existe, responde 400.
+func (s *Server) formKB(w http.ResponseWriter, r *http.Request) (*kbs.KB, bool) {
+	k, ok := s.KBs.Get(r.PostFormValue("kb"))
+	if !ok {
+		s.renderConnectors(w, r, http.StatusBadRequest, "Elige una base.")
+	}
+	return k, ok
+}
+
 func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
+	k, ok := s.formKB(w, r)
+	if !ok {
+		return
+	}
 	repo := r.PostFormValue("repo")
 	if !repoName.MatchString(repo) || strings.Contains(repo, "..") {
 		s.renderConnectors(w, r, http.StatusBadRequest, "Elige un repositorio de la lista.")
@@ -475,8 +519,8 @@ func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/conectores", http.StatusSeeOther)
 		return
 	}
-	if !s.vaultEmpty() {
-		s.ghLink(w, r, repo)
+	if !vaultEmpty(k.V.Root) {
+		s.ghLink(w, r, k, repo)
 		return
 	}
 
@@ -484,7 +528,7 @@ func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
 	// si el proxy corta la conexión, no queda a medias.
 	ctx, cancel := context.WithTimeout(context.Background(), cloneTimeout)
 	defer cancel()
-	tmp, err := s.cloneTmp(ctx, "https://github.com/"+repo+".git", tok)
+	tmp, err := s.cloneTmp(ctx, k.V.Root, "https://github.com/"+repo+".git", tok)
 	if tmp != "" {
 		defer os.RemoveAll(tmp)
 	}
@@ -500,7 +544,7 @@ func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
 
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	c, ok, err := s.State.KBConnector(connGitHub, s.KB) // releer: pudo desconectarse durante el clone
+	c, ok, err := s.State.KBConnector(connGitHub, k.Slug) // releer: pudo desconectarse durante el clone
 	if err != nil {
 		serverError(w, err)
 		return
@@ -509,31 +553,31 @@ func (s *Server) ghRepo(w http.ResponseWriter, r *http.Request) {
 		s.renderConnectors(w, r, http.StatusConflict, "GitHub se desconectó durante la importación; no se importó nada.")
 		return
 	}
-	if !s.vaultEmpty() {
-		s.renderConnectors(w, r, http.StatusConflict, "La base ya tiene notas.")
+	if !vaultEmpty(k.V.Root) {
+		s.renderConnectors(w, r, http.StatusConflict, "La base "+k.Slug+" ya tiene notas.")
 		return
 	}
-	if err := moveInto(tmp, s.V.Root); err != nil {
+	if err := moveInto(tmp, k.V.Root); err != nil {
 		serverError(w, err)
 		return
 	}
 	c.Repo = repo
-	if err := s.State.SaveKBConnector(s.KB, c); err != nil {
+	if err := s.State.SaveKBConnector(k.Slug, c); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := s.markImported(); err != nil {
+	if err := s.markImported(k); err != nil {
 		serverError(w, err)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/k/"+k.Slug+"/", http.StatusSeeOther)
 }
 
 // ghLink enlaza un vault con contenido a repo: debe ser un repo git cuyo origin sea ese repo (o no tener origin).
-func (s *Server) ghLink(w http.ResponseWriter, r *http.Request, repo string) {
+func (s *Server) ghLink(w http.ResponseWriter, r *http.Request, k *kbs.KB, repo string) {
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	c, ok, err := s.State.KBConnector(connGitHub, s.KB)
+	c, ok, err := s.State.KBConnector(connGitHub, k.Slug)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -542,9 +586,9 @@ func (s *Server) ghLink(w http.ResponseWriter, r *http.Request, repo string) {
 		http.Redirect(w, r, "/conectores", http.StatusSeeOther)
 		return
 	}
-	root := s.V.Root
-	if s.vaultEmpty() || !s.Git.IsRepo(root) {
-		s.renderConnectors(w, r, http.StatusConflict, "El vault no es un repositorio git; no se puede enlazar a "+repo+".")
+	root := k.V.Root
+	if vaultEmpty(k.V.Root) || !s.Git.IsRepo(root) {
+		s.renderConnectors(w, r, http.StatusConflict, "El vault de "+k.Slug+" no es un repositorio git; no se puede enlazar a "+repo+".")
 		return
 	}
 	want := "https://github.com/" + repo + ".git"
@@ -560,11 +604,11 @@ func (s *Server) ghLink(w http.ResponseWriter, r *http.Request, repo string) {
 			return
 		}
 	case normRemote(origin) != normRemote(want):
-		s.renderConnectors(w, r, http.StatusConflict, "Este vault apunta a "+origin+"; no se puede enlazar a "+repo+".")
+		s.renderConnectors(w, r, http.StatusConflict, "El vault de "+k.Slug+" apunta a "+origin+"; no se puede enlazar a "+repo+".")
 		return
 	}
 	c.Repo = repo
-	if err := s.State.SaveKBConnector(s.KB, c); err != nil {
+	if err := s.State.SaveKBConnector(k.Slug, c); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -578,8 +622,8 @@ func normRemote(u string) string {
 
 // cloneTmp clona en un directorio hermano del vault: el vault puede tener un .DS_Store y Clone
 // exige un destino vacío; además, si algo falla, el vault queda intacto. El llamador borra tmp.
-func (s *Server) cloneTmp(ctx context.Context, url, token string) (string, error) {
-	tmp, err := os.MkdirTemp(filepath.Dir(s.V.Root), ".scriba-clone-")
+func (s *Server) cloneTmp(ctx context.Context, root, url, token string) (string, error) {
+	tmp, err := os.MkdirTemp(filepath.Dir(root), ".scriba-clone-")
 	if err != nil {
 		return "", err
 	}
@@ -604,12 +648,16 @@ func moveInto(tmp, root string) error {
 }
 
 func (s *Server) ghPush(w http.ResponseWriter, r *http.Request) {
+	k, ok := s.formKB(w, r)
+	if !ok {
+		return
+	}
 	s.setupMu.Lock()
 	defer s.setupMu.Unlock()
-	c, ok, err := s.State.KBConnector(connGitHub, s.KB)
+	c, ok, err := s.State.KBConnector(connGitHub, k.Slug)
 	if err == nil && ok {
 		c.Push = r.PostFormValue("push") == "1"
-		err = s.State.SaveKBConnector(s.KB, c)
+		err = s.State.SaveKBConnector(k.Slug, c)
 	}
 	if err != nil {
 		serverError(w, err)

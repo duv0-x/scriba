@@ -225,6 +225,74 @@
     font-variant-numeric: tabular-nums;
     font-size: 12px;
   }
+  /* Selector de KB: <details> nativo bajo el brand; cambiar de base recarga la página entera. */
+  .kbpick summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--ink);
+    cursor: pointer;
+    list-style: none;
+  }
+  .kbpick summary::-webkit-details-marker {
+    display: none;
+  }
+  .kbpick summary:hover {
+    border-color: var(--accent);
+  }
+  .kbpick code {
+    font: 13px var(--font-mono);
+    background: none;
+    padding: 0;
+    overflow-wrap: anywhere;
+  }
+  .kbpick summary svg {
+    flex: none;
+    color: var(--muted);
+    transition: transform 0.15s;
+  }
+  .kbpick[open] summary svg {
+    transform: rotate(180deg);
+  }
+  .kbpick ul {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .kbpick li a {
+    display: block;
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .kbpick li a:hover {
+    background: var(--accent-soft);
+  }
+  .kbpick li a[aria-current],
+  .kbpick li a.on {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .kbpick .manage {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--line);
+  }
+  .kbpick .manage a {
+    color: var(--muted);
+  }
+  .kbpick .manage a:hover {
+    color: var(--accent);
+  }
   /* Árbol de archivos: <details> por carpeta, 12px de sangría por nivel. */
   .tree {
     font-size: 13px;
@@ -771,6 +839,28 @@
     font-size: 13px;
     color: var(--muted);
   }
+  /* Opciones de radio (crear base): en fila, texto en ink. */
+  .conn .opts {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .conn .opts legend {
+    padding: 0;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .conn .fields label.opt {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--ink);
+  }
   .conn select,
   .conn input[type="text"],
   .conn input[type="email"],
@@ -866,6 +956,19 @@
     font-size: 14px;
     font-weight: 600;
     margin: 4px 0 0;
+  }
+  /* Repo y push de una KB dentro de la tarjeta de GitHub. */
+  .conn-kb {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .conn-kb h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .secret {
     flex: 1;

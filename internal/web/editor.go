@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -27,14 +28,11 @@ const maxForm = 4 * writer.MaxBytes
 // maxMessage es el largo máximo (en caracteres) del mensaje de commit del editor.
 const maxMessage = 200
 
-// editorRoutes registra el editor web (PR3b, T4). Sin Writer no hay editor.
+// editorRoutes registra el editor web; la KB puede no tener Writer y se comprueba por petición.
 func (s *Server) editorRoutes(mux *http.ServeMux) {
-	if s.W == nil {
-		return
-	}
-	mux.HandleFunc("GET /editar/{path...}", s.editForm)
-	mux.HandleFunc("POST /editar/{path...}", s.editSave)
-	mux.HandleFunc("POST /vista-previa", s.preview)
+	mux.HandleFunc("GET /k/{kb}/editar/{path...}", s.kb((*kbServer).editForm))
+	mux.HandleFunc("POST /k/{kb}/editar/{path...}", s.kb((*kbServer).editSave))
+	mux.HandleFunc("POST /k/{kb}/vista-previa", s.kb((*kbServer).preview))
 }
 
 // editorView son los datos de la página del editor.
@@ -48,7 +46,11 @@ type editorView struct {
 	Dirty                        bool   // el textarea trae cambios sin guardar (tras un conflicto o error)
 }
 
-func (s *Server) editForm(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) editForm(w http.ResponseWriter, r *http.Request) {
+	if s.W == nil {
+		http.NotFound(w, r)
+		return
+	}
 	p := r.PathValue("path")
 	raw, ok := s.loadRaw(w, r, p)
 	if !ok {
@@ -57,7 +59,11 @@ func (s *Server) editForm(w http.ResponseWriter, r *http.Request) {
 	s.renderEditor(w, r, http.StatusOK, editorView{Path: p, Content: raw, Base: hash(raw)})
 }
 
-func (s *Server) editSave(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) editSave(w http.ResponseWriter, r *http.Request) {
+	if s.W == nil {
+		http.NotFound(w, r)
+		return
+	}
 	p := r.PathValue("path")
 	r.Body = http.MaxBytesReader(w, r.Body, maxForm)
 	if err := r.ParseForm(); err != nil {
@@ -108,18 +114,22 @@ func (s *Server) editSave(w http.ResponseWriter, r *http.Request) {
 		s.renderEditor(w, r, http.StatusBadRequest, v)
 		return
 	}
-	http.Redirect(w, r, string(noteHref(p)), http.StatusSeeOther)
+	http.Redirect(w, r, string(noteHref(r.Context(), p)), http.StatusSeeOther)
 }
 
 // conflict responde 409 conservando el base enviado y ofreciendo forzar contra current.
-func (s *Server) conflict(w http.ResponseWriter, r *http.Request, v editorView, current string) {
+func (s *kbServer) conflict(w http.ResponseWriter, r *http.Request, v editorView, current string) {
 	v.Current, v.Force = current, hash(current)
 	v.Alert = "La nota cambió mientras la editabas. Revisa el contenido actual y guarda de todos modos o recarga y vuelve a aplicar tus cambios."
 	s.renderEditor(w, r, http.StatusConflict, v)
 }
 
 // preview devuelve solo la prosa renderizada (sin layout) para el panel de vista previa.
-func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) preview(w http.ResponseWriter, r *http.Request) {
+	if s.W == nil {
+		http.NotFound(w, r)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxForm)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "formulario inválido o demasiado grande", http.StatusRequestEntityTooLarge)
@@ -139,7 +149,7 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 }
 
 // loadRaw valida la ruta como el lector y devuelve el Markdown crudo; si falla ya respondió.
-func (s *Server) loadRaw(w http.ResponseWriter, r *http.Request, p string) (string, bool) {
+func (s *kbServer) loadRaw(w http.ResponseWriter, r *http.Request, p string) (string, bool) {
 	_, err := s.readNote(p)
 	if err == nil {
 		var abs string
@@ -167,7 +177,7 @@ func (s *Server) loadRaw(w http.ResponseWriter, r *http.Request, p string) (stri
 	return "", false
 }
 
-func (s *Server) renderEditor(w http.ResponseWriter, r *http.Request, status int, v editorView) {
+func (s *kbServer) renderEditor(w http.ResponseWriter, r *http.Request, status int, v editorView) {
 	body, err := s.renderBody(v.Path, v.Content)
 	if err != nil {
 		serverError(w, err)
@@ -188,8 +198,8 @@ func (s *Server) renderEditor(w http.ResponseWriter, r *http.Request, status int
 
 // renderBody renderiza content como el lector; los wikilinks se resuelven con los enlaces ya
 // indexados de la nota p (los nuevos aparecen como inexistentes hasta guardar).
-func (s *Server) renderBody(p, content string) (template.HTML, error) {
-	res := resolver{}
+func (s *kbServer) renderBody(p, content string) (template.HTML, error) {
+	res := resolver{m: map[string]string{}, base: "/k/" + s.Slug}
 	if p != "" {
 		outs, err := s.Ix.Outlinks(p)
 		if err != nil {
@@ -197,7 +207,7 @@ func (s *Server) renderBody(p, content string) (template.HTML, error) {
 		}
 		for _, l := range outs {
 			if l.Exists {
-				res[l.Raw] = l.Dst
+				res.m[l.Raw] = l.Dst
 			}
 		}
 	}
@@ -239,7 +249,7 @@ func hash(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// editHref arma /editar/<path> escapando cada segmento, como noteHref.
-func editHref(p string) templ.SafeURL {
-	return templ.SafeURL("/editar" + strings.TrimPrefix(string(noteHref(p)), "/n"))
+// editHref arma /k/{kb}/editar/<path> escapando cada segmento, como noteHref.
+func editHref(ctx context.Context, p string) templ.SafeURL {
+	return templ.SafeURL(kbBase(ctx) + "/editar" + strings.TrimPrefix(string(noteHref(ctx, p)), kbBase(ctx)+"/n"))
 }

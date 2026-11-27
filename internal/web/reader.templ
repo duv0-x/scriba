@@ -18,10 +18,10 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 				if editable || kindle {
 					<div class="title-actions">
 						if kindle {
-							@kindleButton(kindleAction(n.Path), "Enviar a Kindle")
+							@kindleButton(kindleHref(ctx, n.Path), "Enviar a Kindle")
 						}
 						if editable {
-							<a class="btn" href={ editHref(n.Path) } hx-boost="false">Editar</a>
+							<a class="btn" href={ editHref(ctx, n.Path) } hx-boost="false">Editar</a>
 						}
 					</div>
 				}
@@ -99,7 +99,7 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 				} else {
 					<ul>
 						for _, b := range back {
-							<li><a href={ noteHref(b.Path) } title={ b.Path }>{ b.Title }<small>{ dirOf(b.Path) }</small></a></li>
+							<li><a href={ noteHref(ctx, b.Path) } title={ b.Path }>{ b.Title }<small>{ dirOf(b.Path) }</small></a></li>
 						}
 					</ul>
 				}
@@ -126,6 +126,6 @@ templ notFoundPage(p string) {
 			<h1>Esta nota no existe</h1>
 			<p class="sub">Puede que se haya movido o que aún no se haya escrito.</p>
 		</div>
-		<p><a href="/">Volver a la actividad</a></p>
+		<p><a href={ templ.SafeURL(kbBase(ctx) + "/") }>Volver a la actividad</a></p>
 	</div>
 }

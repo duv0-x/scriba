@@ -75,7 +75,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderConsent(w http.ResponseWriter, r *http.Request, status int, v consentView) {
-	sh, err := s.shellFor(r, "")
+	sh, err := s.at(r).shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
 		return

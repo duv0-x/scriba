@@ -45,13 +45,13 @@ var graphTypes = []graphType{
 	{Key: "postmortems", Label: "Postmortems"}, {Key: "otras", Label: "Otras"},
 }
 
-// graphRoutes registra /grafo y /api/grafo (PR4, T1).
+// graphRoutes registra el grafo de cada KB.
 func (s *Server) graphRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /grafo", s.graphPage)
-	mux.HandleFunc("GET /api/grafo", s.graphAPI)
+	mux.HandleFunc("GET /k/{kb}/grafo", s.kb((*kbServer).graphPage))
+	mux.HandleFunc("GET /k/{kb}/api/grafo", s.kb((*kbServer).graphAPI))
 }
 
-func (s *Server) graphAPI(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) graphAPI(w http.ResponseWriter, r *http.Request) {
 	g, err := s.graph(false)
 	if err != nil {
 		serverError(w, err)
@@ -78,7 +78,7 @@ func (s *Server) graphAPI(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(g)
 }
 
-func (s *Server) graphPage(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) graphPage(w http.ResponseWriter, r *http.Request) {
 	sh, err := s.shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
@@ -126,7 +126,7 @@ var graphCache struct {
 }
 
 // graph arma nodos y aristas resueltas del índice, sin duplicados (a→b y b→a son una) ni bucles.
-func (s *Server) graph(fresh bool) (graphJSON, error) {
+func (s *kbServer) graph(fresh bool) (graphJSON, error) {
 	graphCache.Lock()
 	defer graphCache.Unlock()
 	if !fresh && graphCache.ix == s.Ix && time.Since(graphCache.at) < 30*time.Second {

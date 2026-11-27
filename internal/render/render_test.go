@@ -107,3 +107,20 @@ func TestHeadingsRepetidos(t *testing.T) {
 		t.Errorf("falta id=\"contexto-1\" en %q", out)
 	}
 }
+
+type baseResolver struct{ fakeResolver }
+
+func (baseResolver) LinkBase() string { return "/k/otra" }
+
+// TestLinkBase: un Resolver con LinkBase pone el prefijo de su KB en los wikilinks (ADR-013).
+func TestLinkBase(t *testing.T) {
+	out, _, err := HTML("[[adr-001#Contexto]] [[#Local]]", baseResolver{fakeResolver{"adr-001": "decisions/adr-001.md"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`href="/k/otra/n/decisions/adr-001.md#contexto"`, `href="#local"`} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("falta %s en %s", want, out)
+		}
+	}
+}

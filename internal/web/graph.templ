@@ -7,7 +7,7 @@ import (
 
 // graphPageView es la vista /grafo: canvas a toda el área, filtros, conteo y zoom (graph.js).
 templ graphPageView(v graphView) {
-	<div class="gmap full" data-grafo="/api/grafo">
+	<div class="gmap full" data-grafo={ kbBase(ctx) + "/api/grafo" }>
 		<canvas role="img" aria-label="Grafo de notas y sus enlaces"></canvas>
 		<div class="gtip" hidden></div>
 		<button type="button" class="menu-button graph-toggle" popovertarget="graph-filters" aria-controls="graph-filters" aria-label="Abrir filtros del grafo">
@@ -58,9 +58,9 @@ templ localGraph(p string) {
 	<section>
 		<div class="ghead">
 			<h2 class="eyebrow">Grafo local</h2>
-			<a href="/grafo">Abrir grafo</a>
+			<a href={ templ.SafeURL(kbBase(ctx) + "/grafo") }>Abrir grafo</a>
 		</div>
-		<div class="gmap local" data-grafo={ "/api/grafo?centro=" + url.QueryEscape(p) } data-centro={ p }>
+		<div class="gmap local" data-grafo={ kbBase(ctx) + "/api/grafo?centro=" + url.QueryEscape(p) } data-centro={ p }>
 			<canvas role="img" aria-label="Notas conectadas con esta"></canvas>
 			<p class="gfoot" data-gcount>Profundidad 1</p>
 		</div>

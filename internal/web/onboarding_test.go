@@ -30,16 +30,19 @@ func TestGating(t *testing.T) {
 func TestBienvenidaNueva(t *testing.T) {
 	e := newSetupServer(t)
 	res, body := post(t, e.h, "/bienvenida/nueva", nil, nil)
-	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/" {
+	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/k/principal/" {
 		t.Fatalf("status %d %q\n%s", res.StatusCode, res.Header.Get("Location"), body)
 	}
-	if _, err := os.Stat(filepath.Join(e.srv.V.Root, "README.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(e.kb.V.Root, "README.md")); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(e.git.calls, []string{"init", "commit"}) || e.imported != 1 {
-		t.Fatalf("git = %v, OnImported = %d", e.git.calls, e.imported)
+	if !slices.Equal(e.git.calls, []string{"init", "commit"}) {
+		t.Fatalf("git = %v", e.git.calls)
 	}
-	if res, _ := get(t, e.h, "/", nil); res.StatusCode != http.StatusOK {
+	if n, err := e.kb.Ix.NoteCount(); err != nil || n == 0 {
+		t.Fatalf("índice tras importar = %d, %v", n, err)
+	}
+	if res, _ := get(t, e.h, "/k/principal/", nil); res.StatusCode != http.StatusOK {
 		t.Fatalf("GET / tras crear = %d", res.StatusCode)
 	}
 	// Una segunda vez, la base ya tiene contenido.
@@ -68,7 +71,7 @@ func TestCSRF(t *testing.T) {
 	if res, _ := post(t, e.h, "/conectores/github/desconectar", nil, map[string]string{"Origin": "http://example.com"}); res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("origin propio: status %d", res.StatusCode)
 	}
-	if _, err := os.Stat(filepath.Join(e.srv.V.Root, "README.md")); err == nil {
+	if _, err := os.Stat(filepath.Join(e.kb.V.Root, "README.md")); err == nil {
 		t.Fatal("un POST rechazado escribió en el vault")
 	}
 }
@@ -95,14 +98,14 @@ func TestZipInseguro(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "El .zip no es seguro: ") {
 		t.Fatalf("status %d sin el mensaje:\n%s", rec.Code, rec.Body.String())
 	}
-	if ents, _ := os.ReadDir(e.srv.V.Root); len(ents) != 0 {
+	if ents, _ := os.ReadDir(e.kb.V.Root); len(ents) != 0 {
 		t.Errorf("el vault quedó con %d entradas", len(ents))
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(e.srv.V.Root), "x")); err == nil {
+	if _, err := os.Stat(filepath.Join(filepath.Dir(e.kb.V.Root), "x")); err == nil {
 		t.Error("escribió fuera del vault")
 	}
-	if len(e.git.calls) != 0 || e.imported != 0 {
-		t.Errorf("git = %v, OnImported = %d", e.git.calls, e.imported)
+	if len(e.git.calls) != 0 {
+		t.Errorf("git = %v", e.git.calls)
 	}
 }
 
@@ -110,11 +113,6 @@ func TestZipInseguro(t *testing.T) {
 // baseline previo cuentan.
 func TestImportarNoMarcaSinLeer(t *testing.T) {
 	e := newSetupServer(t)
-	e.srv.OnImported = func() {
-		if err := e.srv.Ix.Rebuild(e.srv.V); err != nil {
-			t.Error(err)
-		}
-	}
 	if res, _ := get(t, e.h, "/bienvenida", nil); res.StatusCode != http.StatusOK {
 		t.Fatalf("bienvenida = %d", res.StatusCode)
 	}
@@ -124,7 +122,7 @@ func TestImportarNoMarcaSinLeer(t *testing.T) {
 	if res, body := post(t, e.h, "/bienvenida/nueva", nil, nil); res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("nueva = %d\n%s", res.StatusCode, body)
 	}
-	_, body := get(t, e.h, "/", nil)
+	_, body := get(t, e.h, "/k/principal/", nil)
 	if !strings.Contains(body, `data-path="`) {
 		t.Fatalf("la sidebar no lista notas\n%s", body)
 	}

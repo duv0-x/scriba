@@ -58,7 +58,7 @@ type dashData struct {
 	Links   string // "resueltos / total"; "" = sin wikilinks
 }
 
-func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) dashboard(w http.ResponseWriter, r *http.Request) {
 	sh, err := s.shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
@@ -75,7 +75,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	page(w, r, http.StatusOK, layout(sh, "Scriba", dashboardPage(d)))
 }
 
-func (s *Server) dashData(ctx context.Context, now time.Time) (dashData, error) {
+func (s *kbServer) dashData(ctx context.Context, now time.Time) (dashData, error) {
 	var d dashData
 	root := s.V.Root
 	refs, err := s.Ix.Refs()
@@ -131,7 +131,7 @@ func (s *Server) dashData(ctx context.Context, now time.Time) (dashData, error) 
 			if strings.HasSuffix(f, ".md") {
 				it.Title = f
 				if t, ok := titles[f]; ok {
-					it.Title, it.Href = t, string(noteHref(f))
+					it.Title, it.Href = t, string(noteHref(ctx, f))
 				}
 				break
 			}
@@ -250,7 +250,7 @@ var diskCache struct {
 }
 
 // diskStats recorre el vault (sin .git) una vez cada 30 s: tamaños, palabras y wikilinks.
-func (s *Server) diskStats() (diskStat, error) {
+func (s *kbServer) diskStats() (diskStat, error) {
 	diskCache.Lock()
 	defer diskCache.Unlock()
 	if diskCache.root == s.V.Root && time.Since(diskCache.at) < 30*time.Second {

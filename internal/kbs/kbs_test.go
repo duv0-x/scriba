@@ -263,11 +263,11 @@ func TestAislamiento(t *testing.T) {
 	dir := t.TempDir()
 	st, key := newState(t, dir)
 	r := openRegistry(t, dir, st, key)
-	a, err := r.Create("a")
+	a, err := r.Create("a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := r.Create("b")
+	b, err := r.Create("b", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,14 +316,14 @@ func TestCreateYDelete(t *testing.T) {
 	dir := t.TempDir()
 	st, key := newState(t, dir)
 	r := openRegistry(t, dir, st, key)
-	if _, err := r.Create("X"); !errors.Is(err, ErrInvalidSlug) {
+	if _, err := r.Create("X", nil); !errors.Is(err, ErrInvalidSlug) {
 		t.Fatalf("Create inválido: %v", err)
 	}
-	a, err := r.Create("a")
+	a, err := r.Create("a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Create("a"); !errors.Is(err, ErrExists) {
+	if _, err := r.Create("a", nil); !errors.Is(err, ErrExists) {
 		t.Fatalf("Create duplicado: %v", err)
 	}
 	if !gitvault.IsRepo(a.V.Root) {
@@ -354,7 +354,7 @@ func TestCreateYDelete(t *testing.T) {
 	if err := r.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Create("b"); err == nil {
+	if _, err := r.Create("b", nil); err == nil {
 		t.Fatal("Create después de Close abrió una KB")
 	}
 }
@@ -363,7 +363,7 @@ func TestDeleteEsperaEscritura(t *testing.T) {
 	dir := t.TempDir()
 	st, key := newState(t, dir)
 	r := openRegistry(t, dir, st, key)
-	a, err := r.Create("a")
+	a, err := r.Create("a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,5 +442,45 @@ func TestGithubCredYRecordPush(t *testing.T) {
 	recordPush(st, "kb", "fedcba9876543210", nil)
 	if _, ok, _ := st.KBConnector("github", "kb"); ok {
 		t.Fatal("recordPush resucitó el conector")
+	}
+}
+
+func TestCreateFill(t *testing.T) {
+	dir := t.TempDir()
+	st, key := newState(t, dir)
+	r := openRegistry(t, dir, st, key)
+
+	fillOK := func(vaultDir string) error {
+		if err := os.MkdirAll(vaultDir, 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(vaultDir, "hola.md"), []byte("# Hola\n"), 0o644)
+	}
+	k, err := r.Create("z", fillOK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := k.Ix.NoteCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("NoteCount = %d, quería 1", n)
+	}
+	if !gitvault.IsRepo(k.V.Root) {
+		t.Fatal("la KB creada no es un repo git")
+	}
+
+	boom := errors.New("boom")
+	fillErr := func(vaultDir string) error { return boom }
+	_, err = r.Create("y", fillErr)
+	if !errors.Is(err, boom) {
+		t.Fatalf("Create con fill erróneo: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "kbs", "y")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("directorio y sigue existiendo: %v", err)
+	}
+	if _, ok := r.Get("y"); ok {
+		t.Fatal("Get encuentra la KB fallida")
 	}
 }

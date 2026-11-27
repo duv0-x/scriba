@@ -15,7 +15,7 @@
       ctrl = new AbortController();
       const body = new URLSearchParams({ content: src.value, path: form.dataset.path });
       try {
-        const res = await fetch("/vista-previa", { method: "POST", body, signal: ctrl.signal });
+        const res = await fetch((document.body.dataset.base || "") + "/vista-previa", { method: "POST", body, signal: ctrl.signal });
         if (res.ok) preview.innerHTML = await res.text();
       } catch (e) {
         if (e.name !== "AbortError") console.warn("vista previa:", e);
