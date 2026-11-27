@@ -47,8 +47,6 @@ type Config struct {
 	State *state.Store
 	Key   []byte
 	Loc   *time.Location
-
-	OldVault, OldIndex string
 }
 
 var (
@@ -69,15 +67,10 @@ type Registry struct {
 	closed bool
 }
 
-// Open migra el layout viejo si hace falta y abre todas las KBs de <data>/kbs/.
+// Open migra el layout viejo (<data>/vault y <data>/scriba.db) si hace falta y abre todas
+// las KBs de <data>/kbs/.
 func Open(ctx context.Context, cfg Config) (*Registry, error) {
-	if cfg.OldVault == "" {
-		cfg.OldVault = filepath.Join(cfg.Data, "vault")
-	}
-	if cfg.OldIndex == "" {
-		cfg.OldIndex = filepath.Join(cfg.Data, "scriba.db")
-	}
-	migrated, _, err := migrateLayout(cfg.Data, cfg.OldVault, cfg.OldIndex, func() (string, error) {
+	migrated, _, err := migrateLayout(cfg.Data, filepath.Join(cfg.Data, "vault"), filepath.Join(cfg.Data, "scriba.db"), func() (string, error) {
 		c, ok, err := cfg.State.KBConnector("github", "")
 		if err != nil {
 			return "", err

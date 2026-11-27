@@ -17,8 +17,7 @@ Environment=TMPDIR=/scriba/data/tmp
 Environment=HOME=/scriba/data
 # El GC de Go no conoce MemoryMax: con este límite recoge antes de que el kernel mate el proceso.
 Environment=GOMEMLIMIT=160MiB
-# --vault (compatibilidad de ADR-013) migra el layout solo; se pasa a --data en una release posterior, cuando ya no haga falta volver a un binario anterior a ADR-013.
-ExecStart=/scriba/scriba serve --vault /scriba/data/vault --listen ${SCRIBA_LISTEN} --public-url ${SCRIBA_PUBLIC_URL} --tz ${SCRIBA_TZ}
+ExecStart=/scriba/scriba serve --data /scriba/data --listen ${SCRIBA_LISTEN} --public-url ${SCRIBA_PUBLIC_URL} --tz ${SCRIBA_TZ}
 Restart=on-failure
 RestartSec=5
 # La Pi (1 GB) se comparte con Gremio.
