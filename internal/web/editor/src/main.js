@@ -424,10 +424,15 @@ function mount() {
     if (!lista.length || !enlaces.length) return;
     const rt = root.getBoundingClientRect().top;
     const limite = root.clientHeight * 0.3;
+    const arriba = (h) => view.lineBlockAt(h.pos).top + view.documentTop - rt; // top del título respecto a .view
     let activo = lista[0]; // si ninguno pasa el umbral, el primero
     for (const h of lista) {
-      if (view.lineBlockAt(h.pos).top + view.documentTop - rt <= limite) activo = h;
+      if (arriba(h) <= limite) activo = h;
       else break;
+    }
+    // Al final de la nota las últimas secciones no llegan al umbral: gana el último título visible.
+    if (root.scrollTop > 0 && root.scrollTop + root.clientHeight >= root.scrollHeight - 2) {
+      for (const h of lista) if (arriba(h) < root.clientHeight) activo = h;
     }
     let actual = null;
     for (const a of enlaces) {

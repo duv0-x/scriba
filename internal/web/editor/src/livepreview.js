@@ -79,13 +79,12 @@ export function parseTable(lines) {
     out.push(cur.trim());
     return out;
   };
-  // Quita marcas envolventes simples (**, *, ~~, `) del texto de una celda.
+  // Quita marcas envolventes simples (**, *, ~~) del texto de una celda; el código inline lo pinta pintarCelda.
   const limpia = (s) =>
     s
       .replace(/^\*\*(.*)\*\*$/, "$1")
       .replace(/^~~(.*)~~$/, "$1")
-      .replace(/^\*(.*)\*$/, "$1")
-      .replace(/^`(.*)`$/, "$1");
+      .replace(/^\*(.*)\*$/, "$1");
   const align = celdas(lines[1] || "").map((d) =>
     d.startsWith(":") && d.endsWith(":") ? "center" : d.endsWith(":") ? "right" : "left"
   );
@@ -283,6 +282,20 @@ class WidgetFence extends WidgetBloque {
   }
 }
 
+// Pinta el texto de una celda con los code spans (`x`, ``x``) como <code>; el resto, texto plano.
+function pintarCelda(el, txt) {
+  const re = /(?<![`\\])(`+)(?!`)(.+?)(?<!`)\1(?!`)/g;
+  let desde = 0;
+  for (const m of txt.matchAll(re)) {
+    if (m.index > desde) el.append(txt.slice(desde, m.index));
+    const code = document.createElement("code");
+    code.textContent = m[2].trim() || m[2];
+    el.append(code);
+    desde = m.index + m[0].length;
+  }
+  if (desde < txt.length) el.append(txt.slice(desde));
+}
+
 class WidgetTabla extends WidgetBloque {
   toDOM(view) {
     const { align, head, rows } = parseTable(this.fuente.split("\n"));
@@ -292,7 +305,7 @@ class WidgetTabla extends WidgetBloque {
     const trh = document.createElement("tr");
     head.forEach((txt, i) => {
       const th = document.createElement("th");
-      th.textContent = txt;
+      pintarCelda(th, txt);
       if (align[i] && align[i] !== "left") th.style.textAlign = align[i];
       trh.appendChild(th);
     });
@@ -303,7 +316,7 @@ class WidgetTabla extends WidgetBloque {
       const tr = document.createElement("tr");
       fila.forEach((txt, i) => {
         const td = document.createElement("td");
-        td.textContent = txt;
+        pintarCelda(td, txt);
         if (align[i] && align[i] !== "left") td.style.textAlign = align[i];
         tr.appendChild(td);
       });
