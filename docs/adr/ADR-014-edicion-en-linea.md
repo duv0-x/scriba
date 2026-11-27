@@ -53,6 +53,12 @@ Hoy se edita en `/k/{kb}/editar/{path}` (textarea + vista previa, guardado manua
 - **Eco propio:** un `changed` con agente `web` cuyo hash es uno de los `base` que devolvió esta pestaña no recarga ni reproduce. Otra pestaña cuenta como cambio ajeno.
 - **Flush:** al desmontar (navegación parcial o atrás) y en `pagehide` se envía lo pendiente con `PUT …?flush=1` y `keepalive`; en `visibilitychange→hidden`, guardado con `keepalive`. `beforeunload` solo avisa si queda algo sin confirmar.
 
+## Borrador local y atrás/adelante (scriba#61)
+
+- **Borrador local:** si al desmontar (navegación parcial o atrás) el editor tiene texto sin confirmar y la nota está en solo lectura por un agente (423) o en conflicto (409), o si el `PUT ?flush=1` final responde 409/423, el texto y su `base` se guardan en `localStorage` con la clave `scriba:borrador:<url de la nota>` (la URL lleva la KB y la ruta). Al volver a la nota, o al terminar la presencia del agente, un banner ofrece **Recuperar** o **Descartar**. Recuperar pone el texto y lo guarda con el `base` del borrador: si la nota cambió desde entonces, el servidor responde 409 y aparece el conflicto de siempre.
+- **Por qué no confirmar antes de navegar:** `htmx:before:history:restore` (atrás/adelante) no se puede cancelar, y un diálogo modal bloquea la página. El borrador cubre los dos caminos sin diálogos. Si `localStorage` no está disponible (modo privado), se pierde como antes; `beforeunload` sigue avisando al cerrar la pestaña.
+- **Atrás/adelante:** la página que se vuelve a pedir puede salir antes de que termine el `PUT` propio del desmontaje y traer un `base` viejo (→ 409 contra el texto propio). El editor guarda, en estado del módulo (sobrevive a la navegación parcial), el `PUT` propio en vuelo y el último `base` confirmado por URL. Al montar, si hay uno en vuelo o el `base` de la página no es el último confirmado, espera a que terminen y recarga con `?datos=1` si el editor sigue limpio.
+
 ## Alternativas descartadas
 
 | Alternativa | Razón |
@@ -64,6 +70,7 @@ Hoy se edita en `/k/{kb}/editar/{path}` (textarea + vista previa, guardado manua
 | Merge de tres vías | más lógica y riesgo para un caso raro |
 | WYSIWYG sobre un árbol de documento (TipTap, Milkdown) | reformatea el Markdown de los agentes |
 | Bloques renderizados por el servidor y edición por bloque | no es la experiencia pedida |
+| Cancelar el swap y pedir confirmación al navegar | no cubre atrás/adelante y bloquea con un diálogo |
 
 ## Links relacionados
 
