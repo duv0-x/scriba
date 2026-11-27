@@ -32,10 +32,9 @@ Lo que cambia entre una página y otra es solo la vista central (`main.view`). S
    - los resultados de búsqueda, que se cierran.
 4. No se boostean:
    - los forms POST (Bienvenida, Conectores, Agentes);
-   - el form de filtros del grafo;
-   - el enlace "Editar".
+   - el form de filtros del grafo.
 
-   El editor no lleva el atributo en `body`: es una isla de recarga completa que conserva el aviso `beforeunload` y no deja listeners de `editor.js` vivos.
+   Desde scriba#55 no hay editor aparte: el editor en línea del lector (ADR-014) se desmonta en `htmx:before:swap` y antes guarda lo pendiente.
 5. Los scripts que viven dentro de `.view` corren en cada navegación y se limpian solos:
    - el del lector aborta los listeners de la nota anterior (`AbortController`);
    - `graph.js` inicia los `[data-grafo]` nuevos en `htmx:after:settle` y suelta los que salieron del DOM;

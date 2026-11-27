@@ -87,6 +87,9 @@ func NewPresence(window time.Duration, now func() time.Time) *Presence {
 	return &Presence{window: window, now: now, last: map[string]Active{}}
 }
 
+// Window es la ventana en la que una escritura cuenta como presencia.
+func (p *Presence) Window() time.Duration { return p.window }
+
 // Observe registra e si viene de un agente (ignora cambios en disco y de la web).
 func (p *Presence) Observe(e Event) {
 	if e.Agent == "" || e.Agent == "web" {

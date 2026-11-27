@@ -18,9 +18,7 @@ templ layout(sh shell, title string, content templ.Component) {
 		</head>
 		<body
 				data-base={ kbBase(ctx) }
-			if sh.View != "editor" {
 				hx-boost:inherited="target:.view select:.view swap:outerHTML"
-			}
 		>
 			<div class="app">
 				@sidebar(sh)

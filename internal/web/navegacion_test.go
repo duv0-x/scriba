@@ -5,16 +5,19 @@ import (
 	"testing"
 )
 
-// La navegación parcial (ADR-009) va en todas las páginas menos el editor, que recarga completo.
+// La navegación parcial (ADR-009) va en todas las páginas.
 func TestNavegacionParcial(t *testing.T) {
 	h, _ := newEditor(t, true)
 	const boost = `hx-boost:inherited="target:.view select:.view swap:outerHTML"`
 
 	_, body := get(t, h, "/k/principal/n/notes/hoy.md", nil)
-	for _, s := range []string{boost, `hx-history-elt data-current="notes/hoy.md"`, `href="/k/principal/editar/notes/hoy.md" hx-boost="false"`} {
+	for _, s := range []string{boost, `hx-history-elt data-current="notes/hoy.md"`} {
 		if !strings.Contains(body, s) {
 			t.Errorf("lector: falta %q", s)
 		}
+	}
+	if strings.Contains(body, ">Editar</a>") {
+		t.Error("el lector no debe llevar enlace de edición viejo")
 	}
 
 	// Enter en la búsqueda llega boosteado: necesita la página con .view, no el parcial de resultados.
@@ -25,14 +28,6 @@ func TestNavegacionParcial(t *testing.T) {
 	_, body = get(t, h, "/k/principal/buscar?q=texto", map[string]string{"HX-Request": "true"})
 	if strings.Contains(body, `class="view"`) {
 		t.Error("la búsqueda en vivo debe devolver solo el parcial")
-	}
-
-	_, body = get(t, h, "/k/principal/editar/notes/hoy.md", nil)
-	if strings.Contains(body, boost) {
-		t.Error("el editor no debe llevar navegación parcial")
-	}
-	if !strings.Contains(body, `data-view="editor"`) {
-		t.Error("el editor debe marcar data-view=editor")
 	}
 }
 

@@ -115,7 +115,7 @@ var ErrConflict = errors.New("writer: la nota cambió desde que se abrió")
 
 // WriteIfUnchanged reemplaza path solo si su contenido actual tiene el SHA-256 (hex) base.
 // La comparación ocurre bajo el mismo lock que las escrituras de los agentes, así un cambio
-// de un agente nunca se pisa. El commit es inmediato (lo usa el editor viejo /editar).
+// de un agente nunca se pisa. El commit es inmediato (sin uso en la web desde ADR-014; se conserva con su test).
 func (w *Writer) WriteIfUnchanged(agent, path, content, message, base string) (Result, error) {
 	return w.writeIfUnchanged(agent, path, content, message, base, false)
 }

@@ -14,17 +14,8 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 		if edit != nil {
 			@templ.JSONScript("nota-editable", edit)
 			<script data-inline-src={ asset("inline-editor.js") }>
-				// Editor en línea (ADR-014), detrás de un flag hasta scriba#55: ?inline=1 lo activa en este
-				// navegador (localStorage) y ?inline=0 lo apaga. Sin flag, el lector queda como siempre.
+				// Editor en línea (ADR-014): se carga en toda nota editable.
 				(() => {
-					let on = false;
-					try {
-						const q = new URLSearchParams(location.search).get("inline");
-						if (q === "1") localStorage.setItem("scriba.inline", "1");
-						if (q === "0") localStorage.removeItem("scriba.inline");
-						on = localStorage.getItem("scriba.inline") === "1";
-					} catch (_) {}
-					if (!on) return;
 					if (window.scribaInline) return window.scribaInline.mount();
 					if (document.querySelector("script[data-inline-bundle]")) return; // ya cargando: el bundle monta al evaluarse
 					const s = document.createElement("script");
@@ -38,14 +29,9 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 			<div class="crumbs">{ n.Path }</div>
 			<div class="title-row">
 				<h1 class="doc-title">{ n.Title }</h1>
-				if edit != nil || kindle {
+				if kindle {
 					<div class="title-actions">
-						if kindle {
-							@kindleButton(kindleHref(ctx, n.Path), "Enviar a Kindle")
-						}
-						if edit != nil {
-							<a class="btn" href={ editHref(ctx, n.Path) } hx-boost="false">Editar</a>
-						}
+						@kindleButton(kindleHref(ctx, n.Path), "Enviar a Kindle")
 					</div>
 				}
 			</div>

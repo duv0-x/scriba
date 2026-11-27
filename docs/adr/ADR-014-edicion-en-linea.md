@@ -44,6 +44,15 @@ Hoy se edita en `/k/{kb}/editar/{path}` (textarea + vista previa, guardado manua
 - Un bundle de CM6 de unos 200–300 KB, que solo se carga en notas editables.
 - La actividad de los guardados web se registra una vez por commit diferido, no por guardado.
 
+## Activación (scriba#55)
+
+- El editor en línea se monta en toda nota editable, sin flag. Se retiraron `GET/POST /editar/{path}`, `POST /vista-previa`, `editor.templ` y el `editor.js` viejo; `GET /k/{kb}/editar/{path}` responde 301 al lector de la misma nota.
+- **Presencia que expira:** el SSE reenvía `presence` en el instante en que vence la presencia más próxima (`At` + ventana), además de al conectar y tras cada `changed`. El cliente no lleva temporizadores propios de presencia.
+- **Solo lectura por agente:** con presencia de un agente en la nota abierta, el editor se oculta y vuelve a verse la prosa del servidor, que `live.js` sigue actualizando con la reproducción en vivo. Antes se intenta guardar lo pendiente; si el servidor responde 409 o 423, al terminar la presencia se muestra el conflicto.
+- **Recarga:** al expirar la presencia (o ante un cambio ajeno sin cambios locales) el editor pide `GET <nota>?datos=1`, que devuelve el mismo JSON que `nota-editable` (raw, base, links, agent) sin marcar la nota como leída.
+- **Eco propio:** un `changed` con agente `web` cuyo hash es uno de los `base` que devolvió esta pestaña no recarga ni reproduce. Otra pestaña cuenta como cambio ajeno.
+- **Flush:** al desmontar (navegación parcial o atrás) y en `pagehide` se envía lo pendiente con `PUT …?flush=1` y `keepalive`; en `visibilitychange→hidden`, guardado con `keepalive`. `beforeunload` solo avisa si queda algo sin confirmar.
+
 ## Alternativas descartadas
 
 | Alternativa | Razón |
