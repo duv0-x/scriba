@@ -98,7 +98,6 @@ func TestLegacyRedirects(t *testing.T) {
 	}{
 		{http.MethodGet, "/n/README.md?x=1", "/k/principal/n/README.md?x=1", http.StatusMovedPermanently},
 		{http.MethodGet, "/", "/k/principal/", http.StatusMovedPermanently},
-		{http.MethodPost, "/vista-previa", "/k/principal/vista-previa", http.StatusPermanentRedirect},
 	} {
 		req := httptest.NewRequest(tt.method, tt.target, nil)
 		rec := httptest.NewRecorder()
@@ -339,8 +338,6 @@ func TestGridResponsiveSinMinimoIntrinseco(t *testing.T) {
 	compact := strings.Join(strings.Fields(css), "")
 	for _, want := range []string{
 		`.reader{grid-template-columns:minmax(0,1fr);padding:28px20px60px}`,
-		`grid-template-columns:minmax(0,1fr)minmax(0,1fr);`,
-		`.split{grid-template-columns:minmax(0,1fr)}`,
 		`grid-template-columns:minmax(0,1.4fr)minmax(0,1fr);`,
 		`.grid2{grid-template-columns:minmax(0,1fr)}`,
 	} {

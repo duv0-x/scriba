@@ -155,7 +155,7 @@ func (s *Server) Handler() http.Handler {
 	s.liveRoutes(mux)
 	s.graphRoutes(mux)
 	s.editorRoutes(mux)
-	for _, p := range []string{"/{$}", "/n/", "/buscar", "/editar/", "/grafo", "/api/grafo", "/events", "/kindle/", "/vista-previa"} {
+	for _, p := range []string{"/{$}", "/n/", "/buscar", "/editar/", "/grafo", "/api/grafo", "/events", "/kindle/"} {
 		mux.HandleFunc(p, s.legacy)
 	}
 	if s.State == nil {
@@ -216,6 +216,15 @@ func (s *kbServer) note(w http.ResponseWriter, r *http.Request) {
 		if s.Presence != nil {
 			edit.Agent, _ = s.Presence.Writing(n.Path)
 		}
+	}
+	if r.URL.Query().Get("datos") == "1" {
+		// Markdown crudo, base, enlaces y presencia, para que el editor en línea recargue la nota.
+		if edit == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "esta base no se puede editar"})
+			return
+		}
+		writeJSON(w, http.StatusOK, edit)
+		return
 	}
 	body, headings, banner, err := s.readView(r, n, string(raw), res)
 	if err != nil {

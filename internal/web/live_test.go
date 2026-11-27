@@ -102,6 +102,52 @@ func TestEventsSSE(t *testing.T) {
 	}
 }
 
+func TestEventsPresenciaExpira(t *testing.T) {
+	e := newLiveServer(t, false)
+	e.srv.KBs.Default().Presence = events.NewPresence(300*time.Millisecond, nil)
+	ts := httptest.NewServer(e.h)
+	defer ts.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/k/principal/events", nil)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	sc := bufio.NewScanner(res.Body)
+	next := func(name string) string {
+		t.Helper()
+		for sc.Scan() {
+			if sc.Text() == "event: "+name && sc.Scan() {
+				return sc.Text()
+			}
+		}
+		t.Fatalf("no llegó %q: %v", name, sc.Err())
+		return ""
+	}
+	if d := next("presence"); d != "data: []" {
+		t.Fatalf("presence inicial = %q", d)
+	}
+	ev := events.Event{Kind: events.Changed, Path: "notes/a.md", Agent: "claude", At: time.Now()}
+	e.srv.KBs.Default().Presence.Observe(ev)
+	e.srv.KBs.Default().Bus.Publish(ev)
+	if d := next("changed"); !strings.Contains(d, `"agent":"claude"`) {
+		t.Fatalf("changed = %q", d)
+	}
+	if d := next("presence"); !strings.Contains(d, `"agent":"claude"`) {
+		t.Fatalf("presence con agente = %q", d)
+	}
+	// Sin publicar nada más, la ventana vence y el stream avisa con una presencia vacía.
+	start := time.Now()
+	if d := next("presence"); d != "data: []" {
+		t.Fatalf("presence al expirar = %q", d)
+	}
+	if dt := time.Since(start); dt > 2*time.Second {
+		t.Fatalf("la presencia tardó %v en expirar", dt)
+	}
+}
+
 func TestEventsSinBus(t *testing.T) {
 	e := newLiveServer(t, false)
 	e.srv.KBs.Default().Bus = nil

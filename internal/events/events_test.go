@@ -103,3 +103,9 @@ func TestPresence(t *testing.T) {
 		t.Fatalf("Active a los 2 min = %+v", act)
 	}
 }
+
+func TestPresenceWindow(t *testing.T) {
+	if w := NewPresence(42*time.Second, nil).Window(); w != 42*time.Second {
+		t.Fatalf("Window = %v", w)
+	}
+}

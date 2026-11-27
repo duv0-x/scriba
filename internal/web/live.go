@@ -56,14 +56,34 @@ func (s *kbServer) events(w http.ResponseWriter, r *http.Request) {
 		}
 		return rc.Flush() == nil
 	}
+	// La presencia expira sola tras la ventana sin evento nuevo; el timer la reenvía al vencer.
+	timer := time.NewTimer(0)
+	timer.Stop()
+	defer timer.Stop()
 	presence := func() bool {
 		out := []livePresence{}
+		var exp time.Time
 		if s.Presence != nil {
 			for _, a := range s.Presence.Active() {
 				out = append(out, livePresence{Agent: a.Agent, Path: a.Path})
+				if exp.IsZero() || a.At.Before(exp) {
+					exp = a.At
+				}
 			}
 		}
-		return send("presence", out)
+		if !send("presence", out) {
+			return false
+		}
+		if exp.IsZero() {
+			timer.Stop()
+			return true
+		}
+		d := exp.Add(s.Presence.Window() + 50*time.Millisecond).Sub(time.Now())
+		if d < 0 {
+			d = 0
+		}
+		timer.Reset(d)
+		return true
 	}
 	if !presence() {
 		return
@@ -74,6 +94,10 @@ func (s *kbServer) events(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-timer.C:
+			if !presence() {
+				return
+			}
 		case <-tick.C:
 			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil || rc.Flush() != nil {
 				return

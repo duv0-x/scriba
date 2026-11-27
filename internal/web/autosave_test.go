@@ -268,3 +268,45 @@ func TestAutosaveSinWriter(t *testing.T) {
 		t.Fatalf("status %d: %v", res.StatusCode, m)
 	}
 }
+
+func TestNotaDatos(t *testing.T) {
+	h, _ := newEditor(t, true)
+	res, body := get(t, h, "/k/principal/n/notes/hoy.md?datos=1", nil)
+	if res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "application/json" {
+		t.Fatalf("status %d, Content-Type %q", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+	var edit struct {
+		Raw   string            `json:"raw"`
+		Base  string            `json:"base"`
+		Agent string            `json:"agent"`
+		Links map[string]string `json:"links"`
+	}
+	if err := json.Unmarshal([]byte(body), &edit); err != nil {
+		t.Fatalf("JSON inválido: %v", err)
+	}
+	if edit.Raw != editNote || edit.Base != hash(editNote) || edit.Agent != "" || edit.Links == nil {
+		t.Errorf("edit = %+v", edit)
+	}
+
+	// Con presencia de un agente, va en el JSON.
+	h2, _, pres := newAutosave(t)
+	pres.Observe(events.Event{Kind: events.Changed, Path: "notes/hoy.md", Agent: "claude", At: time.Now()})
+	_, body = get(t, h2, "/k/principal/n/notes/hoy.md?datos=1", nil)
+	if err := json.Unmarshal([]byte(body), &edit); err != nil {
+		t.Fatalf("JSON inválido: %v", err)
+	}
+	if edit.Agent != "claude" {
+		t.Errorf("agent = %q, quiero claude", edit.Agent)
+	}
+
+	// Sin Writer, 404.
+	sin, _ := newEditor(t, false)
+	res, body = get(t, sin, "/k/principal/n/notes/hoy.md?datos=1", nil)
+	var m map[string]string
+	if err := json.Unmarshal([]byte(body), &m); err != nil {
+		t.Fatalf("respuesta no es JSON: %q", body)
+	}
+	if res.StatusCode != http.StatusNotFound || m["error"] != "esta base no se puede editar" {
+		t.Fatalf("status %d: %v", res.StatusCode, m)
+	}
+}

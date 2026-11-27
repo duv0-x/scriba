@@ -118,7 +118,9 @@
     if (ev.kind === "deleted") {
       links(ev.path).forEach((a) => a.classList.remove("unread", "writing"));
       if (ev.path === note) gone();
-    } else if (ev.path === note) refresh();
+    }
+    // El editor en línea decide: eco propio o cambio ajeno sobre el doc de CM6 (ADR-014).
+    else if (ev.path === note) window.scribaInline?.changed(ev) || refresh();
     else links(ev.path).forEach((a) => a.classList.add("unread"));
   });
 })();
