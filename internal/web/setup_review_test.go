@@ -37,16 +37,16 @@ func TestZipConHistorialGit(t *testing.T) {
 	e.h.ServeHTTP(rec, req)
 
 	loc := rec.Result().Header.Get("Location")
-	if rec.Code != http.StatusSeeOther || loc != "/?aviso=historial" {
+	if rec.Code != http.StatusSeeOther || loc != "/k/principal/?aviso=historial" {
 		t.Fatalf("status %d Location %q\n%s", rec.Code, loc, rec.Body.String())
 	}
-	if _, err := os.Stat(filepath.Join(e.srv.V.Root, ".git", "config")); err == nil {
+	if _, err := os.Stat(filepath.Join(e.kb.V.Root, ".git", "config")); err == nil {
 		t.Error("se importó el .git del zip")
 	}
 	if _, body := get(t, e.h, loc, nil); !strings.Contains(body, "El .zip traía historial de git (.git)") {
 		t.Errorf("falta el aviso en la home:\n%s", body)
 	}
-	if _, body := get(t, e.h, "/", nil); strings.Contains(body, "historial de git") {
+	if _, body := get(t, e.h, "/k/principal/", nil); strings.Contains(body, "historial de git") {
 		t.Error("el aviso no debe salir sin el parámetro")
 	}
 }
@@ -57,7 +57,7 @@ func TestDesconectarDuranteClone(t *testing.T) {
 	e.git.cloneStarted, e.git.cloneHold = make(chan struct{}), make(chan struct{})
 	done := make(chan string)
 	go func() {
-		res, body := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil)
+		res, body := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"duv0-x/ia-kb"}}, nil)
 		done <- res.Status + "\n" + body
 	}()
 	<-e.git.cloneStarted
@@ -69,16 +69,16 @@ func TestDesconectarDuranteClone(t *testing.T) {
 	if !strings.Contains(out, "se desconectó durante la importación") {
 		t.Errorf("respuesta del import:\n%s", out)
 	}
-	if _, ok, _ := e.srv.State.KBConnector("github", e.srv.KB); ok {
+	if _, ok, _ := e.srv.State.KBConnector("github", e.kb.Slug); ok {
 		t.Fatal("el conector reapareció tras desconectar")
 	}
-	if !e.srv.vaultEmpty() || e.imported != 0 {
-		t.Errorf("vault vacío %v, OnImported %d", e.srv.vaultEmpty(), e.imported)
+	if !vaultEmpty(e.srv.KBs.Default().V.Root) {
+		t.Error("el vault no quedó vacío")
 	}
 	if v, _, _ := e.srv.State.Setting("initialized"); v == "1" {
 		t.Error("quedó initialized")
 	}
-	if m, _ := filepath.Glob(filepath.Join(filepath.Dir(e.srv.V.Root), ".scriba-clone-*")); len(m) != 0 {
+	if m, _ := filepath.Glob(filepath.Join(filepath.Dir(e.kb.V.Root), ".scriba-clone-*")); len(m) != 0 {
 		t.Errorf("quedaron temporales: %v", m)
 	}
 }
@@ -86,7 +86,7 @@ func TestDesconectarDuranteClone(t *testing.T) {
 // conVault deja una nota en el vault para que la importación sea un enlace.
 func conVault(t *testing.T, e *setupEnv) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(e.srv.V.Root, "nota.md"), []byte("# Nota\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(e.kb.V.Root, "nota.md"), []byte("# Nota\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	e.git.isRepo = true
@@ -98,11 +98,11 @@ func TestEnlazar(t *testing.T) {
 		connect(t, e)
 		conVault(t, e)
 		e.git.remote = "https://github.com/otro/repo.git"
-		res, body := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil)
-		if res.StatusCode != http.StatusConflict || !strings.Contains(body, "Este vault apunta a https://github.com/otro/repo.git; no se puede enlazar a duv0-x/ia-kb") {
+		res, body := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"duv0-x/ia-kb"}}, nil)
+		if res.StatusCode != http.StatusConflict || !strings.Contains(body, "El vault de principal apunta a https://github.com/otro/repo.git; no se puede enlazar a duv0-x/ia-kb") {
 			t.Fatalf("status %d\n%s", res.StatusCode, body)
 		}
-		if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "" || e.git.setRemote != "" {
+		if c, _, _ := e.srv.State.KBConnector("github", e.kb.Slug); c.Repo != "" || e.git.setRemote != "" {
 			t.Errorf("repo %q, setRemote %q", c.Repo, e.git.setRemote)
 		}
 	})
@@ -111,10 +111,10 @@ func TestEnlazar(t *testing.T) {
 		connect(t, e)
 		conVault(t, e)
 		e.git.remote = "https://github.com/Duv0-X/IA-KB"
-		if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil); res.StatusCode != http.StatusSeeOther {
+		if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"duv0-x/ia-kb"}}, nil); res.StatusCode != http.StatusSeeOther {
 			t.Fatalf("status %d", res.StatusCode)
 		}
-		if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "duv0-x/ia-kb" || e.git.setRemote != "" {
+		if c, _, _ := e.srv.State.KBConnector("github", e.kb.Slug); c.Repo != "duv0-x/ia-kb" || e.git.setRemote != "" {
 			t.Errorf("repo %q, setRemote %q", c.Repo, e.git.setRemote)
 		}
 	})
@@ -122,13 +122,13 @@ func TestEnlazar(t *testing.T) {
 		e := newSetupServer(t)
 		connect(t, e)
 		conVault(t, e)
-		if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil); res.StatusCode != http.StatusSeeOther {
+		if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"duv0-x/ia-kb"}}, nil); res.StatusCode != http.StatusSeeOther {
 			t.Fatalf("status %d", res.StatusCode)
 		}
 		if e.git.setRemote != "https://github.com/duv0-x/ia-kb.git" {
 			t.Errorf("setRemote %q", e.git.setRemote)
 		}
-		if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "duv0-x/ia-kb" || c.Account != "duv0-x" {
+		if c, _, _ := e.srv.State.KBConnector("github", e.kb.Slug); c.Repo != "duv0-x/ia-kb" || c.Account != "duv0-x" {
 			t.Errorf("conector %+v", c)
 		}
 	})
@@ -137,7 +137,7 @@ func TestEnlazar(t *testing.T) {
 		connect(t, e)
 		conVault(t, e)
 		e.git.isRepo = false
-		if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil); res.StatusCode != http.StatusConflict {
+		if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"duv0-x/ia-kb"}}, nil); res.StatusCode != http.StatusConflict {
 			t.Fatalf("status %d", res.StatusCode)
 		}
 	})
@@ -166,8 +166,11 @@ func TestCrearBaseConcurrente(t *testing.T) {
 			rejected++
 		}
 	}
-	if created != 1 || rejected != 1 || e.imported != 1 {
-		t.Fatalf("codes %v, OnImported %d", codes, e.imported)
+	if created != 1 || rejected != 1 {
+		t.Fatalf("codes %v", codes)
+	}
+	if n, err := e.kb.Ix.NoteCount(); err != nil || n == 0 {
+		t.Fatalf("índice tras importar = %d, %v", n, err)
 	}
 }
 
@@ -188,7 +191,7 @@ func TestSinSecretosEnHTML(t *testing.T) {
 	if res.Header.Get("HX-Redirect") != "/conectores" {
 		t.Errorf("otra pestaña: HX-Redirect %q", res.Header.Get("HX-Redirect"))
 	}
-	post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil)
+	post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"duv0-x/ia-kb"}}, nil)
 	_, b = get(t, e.h, "/conectores", nil)
 	add(nil, b)
 	if !strings.Contains(b, "Último push") || strings.Contains(b, "Se activa cuando los agentes empiecen a escribir") {

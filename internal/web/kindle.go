@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -113,7 +114,7 @@ func (s *Server) kindleDisconnect(w http.ResponseWriter, r *http.Request) {
 }
 
 // kindleNote manda una nota a la Kindle: la ruta solo acepta POST y solo notas que existan.
-func (s *Server) kindleNote(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) kindleNote(w http.ResponseWriter, r *http.Request) {
 	n, err := s.readNote(r.PathValue("path"))
 	switch {
 	case errors.Is(err, vault.ErrOutside):
@@ -154,7 +155,7 @@ func (s *Server) kindleSend(w http.ResponseWriter, r *http.Request, n kindle.Not
 	page(w, r, http.StatusOK, kindleResult(""))
 }
 
-// kindleAction es la URL del POST de envío de la nota p.
-func kindleAction(p string) string {
-	return "/kindle/" + strings.TrimPrefix(string(noteHref(p)), "/n/")
+// kindleHref es la URL del POST de envío de la nota p.
+func kindleHref(ctx context.Context, p string) string {
+	return kbBase(ctx) + "/kindle/" + strings.TrimPrefix(string(noteHref(ctx, p)), kbBase(ctx)+"/n/")
 }

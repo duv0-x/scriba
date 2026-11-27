@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/duv0-x/scriba/internal/github"
+	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/secrets"
 	"github.com/duv0-x/scriba/internal/state"
+	"github.com/duv0-x/scriba/internal/vault"
 )
 
 // connect recorre el device flow hasta dejar el conector guardado.
@@ -52,7 +57,7 @@ func TestDeviceFlow(t *testing.T) {
 	if res.Header.Get("HX-Redirect") != "/conectores" {
 		t.Fatalf("éxito: HX-Redirect = %q", res.Header.Get("HX-Redirect"))
 	}
-	c, ok, err := e.srv.State.KBConnector("github", e.srv.KB)
+	c, ok, err := e.srv.State.KBConnector("github", e.kb.Slug)
 	if err != nil || !ok || c.Account != "duv0-x" {
 		t.Fatalf("conector = %+v %v %v", c, ok, err)
 	}
@@ -76,7 +81,7 @@ func TestDeviceFlowDenegado(t *testing.T) {
 	if !strings.Contains(body, "Cancelaste") || !strings.Contains(body, "/conectores/github/iniciar") {
 		t.Fatalf("denegado:\n%s", body)
 	}
-	if _, ok, _ := e.srv.State.KBConnector("github", e.srv.KB); ok {
+	if _, ok, _ := e.srv.State.KBConnector("github", e.kb.Slug); ok {
 		t.Error("no debe guardar conector")
 	}
 }
@@ -84,23 +89,26 @@ func TestDeviceFlowDenegado(t *testing.T) {
 func TestRepoImport(t *testing.T) {
 	e := newSetupServer(t)
 	connect(t, e)
-	if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"x/../../y"}}, nil); res.StatusCode != http.StatusBadRequest {
+	if res, _ := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"x/../../y"}}, nil); res.StatusCode != http.StatusBadRequest {
 		t.Errorf("repo inválido = %d", res.StatusCode)
 	}
-	res, body := post(t, e.h, "/conectores/github/repo", url.Values{"repo": {"duv0-x/ia-kb"}}, nil)
-	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/" {
+	res, body := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {e.kb.Slug}, "repo": {"duv0-x/ia-kb"}}, nil)
+	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/k/principal/" {
 		t.Fatalf("status %d %q\n%s", res.StatusCode, res.Header.Get("Location"), body)
 	}
 	if e.git.cloneURL != "https://github.com/duv0-x/ia-kb.git" || e.git.cloneTok != e.gh.token {
 		t.Fatalf("clone url %q, token por Cred: %v", e.git.cloneURL, e.git.cloneTok == e.gh.token)
 	}
-	if v, _, _ := e.srv.State.Setting("initialized"); v != "1" || e.imported != 1 {
-		t.Fatalf("initialized = %q, OnImported = %d", v, e.imported)
+	if v, _, _ := e.srv.State.Setting("initialized"); v != "1" {
+		t.Fatalf("initialized = %q", v)
 	}
-	if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Repo != "duv0-x/ia-kb" {
+	if n, err := e.kb.Ix.NoteCount(); err != nil || n == 0 {
+		t.Fatalf("índice tras importar = %d, %v", n, err)
+	}
+	if c, _, _ := e.srv.State.KBConnector("github", e.kb.Slug); c.Repo != "duv0-x/ia-kb" {
 		t.Errorf("repo = %q", c.Repo)
 	}
-	if e.srv.vaultEmpty() {
+	if vaultEmpty(e.srv.KBs.Default().V.Root) {
 		t.Error("el contenido clonado no llegó al vault")
 	}
 }
@@ -108,13 +116,13 @@ func TestRepoImport(t *testing.T) {
 // TestPushPorKB: el repo/push de GitHub es por KB; tocar el de "a" no toca el de "b".
 func TestPushPorKB(t *testing.T) {
 	e := newSetupServer(t)
-	e.srv.KB = "a"
+	e.kb.Slug = "a"
 	for _, kb := range []string{"a", "b"} {
 		if err := e.srv.State.SaveKBConnector(kb, state.Connector{Name: connGitHub, Push: true}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if res, _ := post(t, e.h, "/conectores/github/push", url.Values{"push": {"0"}}, nil); res.StatusCode != http.StatusSeeOther {
+	if res, _ := post(t, e.h, "/conectores/github/push", url.Values{"kb": {e.kb.Slug}, "push": {"0"}}, nil); res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("push = %d", res.StatusCode)
 	}
 	if c, _, _ := e.srv.State.KBConnector(connGitHub, "a"); c.Push {
@@ -128,15 +136,78 @@ func TestPushPorKB(t *testing.T) {
 func TestPushYDesconectar(t *testing.T) {
 	e := newSetupServer(t)
 	connect(t, e)
-	post(t, e.h, "/conectores/github/push", url.Values{"push": {"0"}}, nil)
-	if c, _, _ := e.srv.State.KBConnector("github", e.srv.KB); c.Push {
+	post(t, e.h, "/conectores/github/push", url.Values{"kb": {e.kb.Slug}, "push": {"0"}}, nil)
+	if c, _, _ := e.srv.State.KBConnector("github", e.kb.Slug); c.Push {
 		t.Error("push sigue activo")
 	}
 	res, _ := post(t, e.h, "/conectores/github/desconectar", nil, nil)
 	if res.StatusCode != http.StatusSeeOther || res.Header.Get("Location") != "/conectores" {
 		t.Fatalf("desconectar = %d", res.StatusCode)
 	}
-	if _, ok, _ := e.srv.State.KBConnector("github", e.srv.KB); ok {
+	if _, ok, _ := e.srv.State.KBConnector("github", e.kb.Slug); ok {
 		t.Fatal("el conector sigue guardado")
+	}
+}
+
+// addKB añade a e una segunda KB con una nota y su propio vault (no vacío: se enlaza, no se importa).
+func addKB(t *testing.T, e *setupEnv, slug string) *kbs.KB {
+	t.Helper()
+	dir := t.TempDir()
+	root := filepath.Join(dir, "vault")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nota.md"), []byte("# Nota\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	v, err := vault.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix, err := index.Open(filepath.Join(dir, "index.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ix.Close() })
+	k := &kbs.KB{Slug: slug, V: v, Ix: ix}
+	f := e.srv.KBs.(*fakeKBs)
+	f.list = append(f.list, k)
+	return k
+}
+
+// TestConectoresPorKB: la cuenta se conecta una vez; repo y push son de cada KB.
+func TestConectoresPorKB(t *testing.T) {
+	e := newSetupServer(t)
+	addKB(t, e, "otra")
+	connect(t, e)
+	e.git.isRepo = true
+
+	_, body := get(t, e.h, "/conectores", nil)
+	if !strings.Contains(body, "<code>principal</code>") || !strings.Contains(body, "<code>otra</code>") || strings.Count(body, ">Desconectar<") != 1 {
+		t.Fatalf("conectores con dos KBs:\n%s", body)
+	}
+
+	if res, body := post(t, e.h, "/conectores/github/repo", url.Values{"kb": {"otra"}, "repo": {"owner/otra"}}, nil); res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("enlazar otra = %d\n%s", res.StatusCode, body)
+	}
+	if c, _, _ := e.srv.State.KBConnector(connGitHub, "otra"); c.Repo != "owner/otra" || c.Account != "duv0-x" {
+		t.Errorf("otra = %+v", c)
+	}
+	if c, _, _ := e.srv.State.KBConnector(connGitHub, testKB); c.Repo != "" {
+		t.Errorf("principal recibió el repo de otra: %q", c.Repo)
+	}
+
+	post(t, e.h, "/conectores/github/push", url.Values{"kb": {"otra"}, "push": {"0"}}, nil)
+	if c, _, _ := e.srv.State.KBConnector(connGitHub, "otra"); c.Push {
+		t.Error("push de otra sigue activo")
+	}
+	if c, _, _ := e.srv.State.KBConnector(connGitHub, testKB); !c.Push {
+		t.Error("push de principal cambió")
+	}
+
+	for _, p := range []string{"/conectores/github/repo", "/conectores/github/push"} {
+		if res, _ := post(t, e.h, p, url.Values{"kb": {"noexiste"}, "repo": {"owner/x"}, "push": {"0"}}, nil); res.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s con kb inexistente = %d", p, res.StatusCode)
+		}
 	}
 }

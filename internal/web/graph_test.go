@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/vault"
 )
 
@@ -39,7 +40,7 @@ func ids(g graphJSON) []string {
 }
 
 func TestGraphAPI(t *testing.T) {
-	g := apiGraph(t, "/api/grafo")
+	g := apiGraph(t, "/k/principal/api/grafo")
 	j := "journal/2026-11-16.md"
 	want := []graphEdge{{j, "decisions/personal/adr-001.md"}, {j, "runbooks/personal/runbook-pi.md"}}
 	// adr-001 aparece dos veces en el journal ([[adr-001]] y [[adr-001#Contexto]]): una sola arista.
@@ -59,14 +60,14 @@ func TestGraphAPI(t *testing.T) {
 }
 
 func TestGraphAPICentro(t *testing.T) {
-	g := apiGraph(t, "/api/grafo?centro=decisions%2Fpersonal%2Fadr-001.md")
+	g := apiGraph(t, "/k/principal/api/grafo?centro=decisions%2Fpersonal%2Fadr-001.md")
 	if got := ids(g); !slices.Equal(got, []string{"decisions/personal/adr-001.md", "journal/2026-11-16.md"}) {
 		t.Errorf("nodos = %v", got)
 	}
 	if len(g.Edges) != 1 {
 		t.Errorf("edges = %v", g.Edges)
 	}
-	if res, _ := get(t, newServer(t), "/api/grafo?centro=no-existe.md", nil); res.StatusCode != 404 {
+	if res, _ := get(t, newServer(t), "/k/principal/api/grafo?centro=no-existe.md", nil); res.StatusCode != 404 {
 		t.Errorf("centro inexistente: status = %d", res.StatusCode)
 	}
 }
@@ -77,13 +78,13 @@ func TestGraphPages(t *testing.T) {
 		target string
 		has    []string
 	}{
-		{"/grafo", []string{`<canvas`, `data-grafo="/api/grafo"`, `name="tipo" value="decisions"`, "Mostrar huérfanas",
+		{"/k/principal/grafo", []string{`<canvas`, `data-grafo="/k/principal/api/grafo"`, `name="tipo" value="decisions"`, "Mostrar huérfanas",
 			`class="menu-button graph-toggle" popovertarget="graph-filters"`,
 			`aria-controls="graph-filters" aria-label="Abrir filtros del grafo"`,
 			`class="gfilters" id="graph-filters" popover="auto"`,
-			"Tamaño de nodos", "Grosor de enlaces", "Distancia", "3 notas · 2 enlaces", `href="/grafo" class="on"`, "/static/graph.js"}},
-		{"/n/decisions/personal/adr-001.md", []string{"Grafo local", "Abrir grafo",
-			`data-grafo="/api/grafo?centro=decisions%2Fpersonal%2Fadr-001.md"`, "/static/graph.js"}},
+			"Tamaño de nodos", "Grosor de enlaces", "Distancia", "3 notas · 2 enlaces", `href="/k/principal/grafo" class="on"`, "/static/graph.js"}},
+		{"/k/principal/n/decisions/personal/adr-001.md", []string{"Grafo local", "Abrir grafo",
+			`data-grafo="/k/principal/api/grafo?centro=decisions%2Fpersonal%2Fadr-001.md"`, "/static/graph.js"}},
 	}
 	for _, c := range cases {
 		res, body := get(t, h, c.target, nil)
@@ -116,8 +117,8 @@ func TestGraphAPICentroNotaNueva(t *testing.T) {
 	if err := ix.Rebuild(v); err != nil {
 		t.Fatal(err)
 	}
-	h := (&Server{V: v, Ix: ix}).Handler()
-	get(t, h, "/api/grafo", nil) // llena la caché
+	h := (&Server{KBs: oneKB(&kbs.KB{V: v, Ix: ix})}).Handler()
+	get(t, h, "/k/principal/api/grafo", nil) // llena la caché
 
 	p := "drafts/nueva.md"
 	if err := os.MkdirAll(filepath.Join(dir, "drafts"), 0o755); err != nil {
@@ -133,7 +134,7 @@ func TestGraphAPICentroNotaNueva(t *testing.T) {
 	if err := ix.Upsert(n); err != nil {
 		t.Fatal(err)
 	}
-	res, body := get(t, h, "/api/grafo?centro="+url.QueryEscape(p), nil)
+	res, body := get(t, h, "/k/principal/api/grafo?centro="+url.QueryEscape(p), nil)
 	if res.StatusCode != 200 || !strings.Contains(body, "decisions/personal/adr-001.md") {
 		t.Fatalf("status = %d\n%s", res.StatusCode, body)
 	}

@@ -1,5 +1,7 @@
 package web
 
+import "github.com/duv0-x/scriba/internal/github"
+
 // welcomePage es la primera pantalla con la base vacía: crear, importar de GitHub o subir un .zip.
 templ welcomePage(msg string) {
 	<div class="setup">
@@ -64,6 +66,67 @@ templ connectorsPage(v ghView) {
 	</div>
 }
 
+// ghKBBlock es el repo destino y el push de una KB dentro de la tarjeta de GitHub.
+templ ghKBBlock(kb ghKBView, repos []github.Repo) {
+	<div class="conn-kb">
+		<h3>
+			<code>{ kb.Slug }</code>
+			if kb.Default {
+				<span class="pill">Por defecto</span>
+			}
+		</h3>
+		if kb.Conn.Repo == "" {
+			<form hx-boost="false" method="post" action="/conectores/github/repo" class="row">
+				<input type="hidden" name="kb" value={ kb.Slug }/>
+				<select name="repo" required aria-label={ "Repositorio de " + kb.Slug }>
+					for _, r := range repos {
+						<option value={ r.FullName }>
+							{ r.FullName }
+							if r.Private {
+								· privado
+							}
+						</option>
+					}
+				</select>
+				if kb.VaultEmpty {
+					<button class="btn primary" type="submit">Importar este repositorio</button>
+				} else {
+					<button class="btn primary" type="submit">Enlazar</button>
+				}
+			</form>
+		} else {
+			<dl class="kv">
+				<dt>Repositorio</dt>
+				<dd><code>{ kb.Conn.Repo }</code>
+					if kb.Branch != "" {
+						<span class="pill mono">{ kb.Branch }</span>
+					}
+				</dd>
+				<dt>Sincronización</dt>
+				<dd>
+					<form hx-boost="false" method="post" action="/conectores/github/push" class="row">
+						<input type="hidden" name="kb" value={ kb.Slug }/>
+						Push automático después de cada commit
+						<button class="switch" type="submit" name="push" value={ toggleValue(kb.Conn.Push) } role="switch" aria-checked={ boolAttr(kb.Conn.Push) } aria-label={ "Push automático de " + kb.Slug + " después de cada commit" }></button>
+					</form>
+				</dd>
+				<dt>Último push</dt>
+				<dd>
+					if kb.Conn.LastPush != "" {
+						{ kb.Conn.LastPush }
+					} else {
+						aún no
+					}
+				</dd>
+				if kb.Conn.LastError != "" {
+					<dt>Error</dt>
+					<dd class="bad">{ kb.Conn.LastError }</dd>
+				}
+			</dl>
+		}
+	</div>
+}
+
 templ ghCard(v ghView) {
 	<section class="conn">
 		<div class="conn-head">
@@ -79,52 +142,8 @@ templ ghCard(v ghView) {
 		</div>
 		if v.Connected {
 			<p class="desc">Cuenta <b>{ v.Conn.Account }</b> · scope repo</p>
-			if v.Conn.Repo == "" {
-				<form hx-boost="false" method="post" action="/conectores/github/repo" class="row">
-					<select name="repo" required aria-label="Repositorio">
-						for _, r := range v.Repos {
-							<option value={ r.FullName }>
-								{ r.FullName }
-								if r.Private {
-									· privado
-								}
-							</option>
-						}
-					</select>
-					if v.VaultEmpty {
-						<button class="btn primary" type="submit">Importar este repositorio</button>
-					} else {
-						<button class="btn primary" type="submit">Enlazar</button>
-					}
-				</form>
-			} else {
-				<dl class="kv">
-					<dt>Repositorio</dt>
-					<dd><code>{ v.Conn.Repo }</code>
-						if v.Branch != "" {
-							<span class="pill mono">{ v.Branch }</span>
-						}
-					</dd>
-					<dt>Sincronización</dt>
-					<dd>
-						<form hx-boost="false" method="post" action="/conectores/github/push" class="row">
-							Push automático después de cada commit
-							<button class="switch" type="submit" name="push" value={ toggleValue(v.Conn.Push) } role="switch" aria-checked={ boolAttr(v.Conn.Push) } aria-label="Push automático después de cada commit"></button>
-						</form>
-					</dd>
-					<dt>Último push</dt>
-					<dd>
-						if v.Conn.LastPush != "" {
-							{ v.Conn.LastPush }
-						} else {
-							aún no
-						}
-					</dd>
-					if v.Conn.LastError != "" {
-						<dt>Error</dt>
-						<dd class="bad">{ v.Conn.LastError }</dd>
-					}
-				</dl>
+			for _, kb := range v.KBs {
+				@ghKBBlock(kb, v.Repos)
 			}
 			<form hx-boost="false" method="post" action="/conectores/github/desconectar" class="end">
 				<button class="btn danger" type="submit">Desconectar</button>

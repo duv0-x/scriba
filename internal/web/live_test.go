@@ -13,6 +13,7 @@ import (
 
 	"github.com/duv0-x/scriba/internal/events"
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/state"
 	"github.com/duv0-x/scriba/internal/vault"
 )
@@ -49,7 +50,7 @@ func newLiveServer(t *testing.T, withState bool) liveEnv {
 	if err := ix.Rebuild(v); err != nil {
 		t.Fatal(err)
 	}
-	srv := &Server{V: v, Ix: ix, Bus: events.NewBus(), Presence: events.NewPresence(time.Minute, nil)}
+	srv := &Server{KBs: oneKB(&kbs.KB{V: v, Ix: ix, Bus: events.NewBus(), Presence: events.NewPresence(time.Minute, nil)})}
 	if withState {
 		st, err := state.Open(filepath.Join(t.TempDir(), "state.db"))
 		if err != nil {
@@ -67,7 +68,7 @@ func TestEventsSSE(t *testing.T) {
 	defer ts.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/events", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.URL+"/k/principal/events", nil)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +92,8 @@ func TestEventsSSE(t *testing.T) {
 		t.Fatalf("presence inicial = %q", d)
 	}
 	ev := events.Event{Kind: events.Changed, Path: "notes/a.md", Agent: "claude", At: time.Now()}
-	e.srv.Presence.Observe(ev)
-	e.srv.Bus.Publish(ev)
+	e.srv.KBs.Default().Presence.Observe(ev)
+	e.srv.KBs.Default().Bus.Publish(ev)
 	if d := next("changed"); d != `data: {"path":"notes/a.md","agent":"claude","kind":"changed"}` {
 		t.Fatalf("changed = %q", d)
 	}
@@ -103,8 +104,8 @@ func TestEventsSSE(t *testing.T) {
 
 func TestEventsSinBus(t *testing.T) {
 	e := newLiveServer(t, false)
-	e.srv.Bus = nil
-	if res, _ := get(t, e.srv.Handler(), "/events", nil); res.StatusCode != http.StatusNotFound {
+	e.srv.KBs.Default().Bus = nil
+	if res, _ := get(t, e.srv.Handler(), "/k/principal/events", nil); res.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d", res.StatusCode)
 	}
 }
@@ -112,14 +113,14 @@ func TestEventsSinBus(t *testing.T) {
 func TestSinLeer(t *testing.T) {
 	e := newLiveServer(t, true)
 	// Primera vista: baseline y lectura registrada, sin marcas.
-	_, body := get(t, e.h, "/n/notes/a.md", nil)
+	_, body := get(t, e.h, "/k/principal/n/notes/a.md", nil)
 	if strings.Contains(body, `class="chg"`) || strings.Contains(body, bannerChanged) {
 		t.Fatal("la primera vista no debe marcar cambios")
 	}
 	if !strings.Contains(body, `data-note="notes/a.md"`) {
 		t.Error("falta data-note en el lector")
 	}
-	if _, ok, err := e.srv.State.LastRead(e.srv.KB, "default", "notes/a.md"); err != nil || !ok {
+	if _, ok, err := e.srv.State.LastRead(testKB, "default", "notes/a.md"); err != nil || !ok {
 		t.Fatalf("LastRead = %v %v", ok, err)
 	}
 
@@ -128,7 +129,7 @@ func TestSinLeer(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Folios (desde otra nota) muestra el punto de a.md.
-	_, body = get(t, e.h, "/n/notes/b.md", nil)
+	_, body = get(t, e.h, "/k/principal/n/notes/b.md", nil)
 	if !strings.Contains(body, `data-path="notes/a.md" class="unread"`) {
 		t.Error("Folios no marca notes/a.md como sin leer")
 	}
@@ -136,14 +137,14 @@ func TestSinLeer(t *testing.T) {
 		t.Error("notes/b.md no debe salir sin leer")
 	}
 
-	_, body = get(t, e.h, "/n/notes/a.md", nil)
+	_, body = get(t, e.h, "/k/principal/n/notes/a.md", nil)
 	if strings.Count(body, `class="chg"`) != 1 || !strings.Contains(body, `<div class="chg"><p>Bloque nuevo del agente.</p>`) {
 		t.Fatalf("segunda vista: quiero .chg solo en el bloque nuevo\n%s", body)
 	}
 	if !strings.Contains(body, bannerChanged) || !strings.Contains(body, "<table>") {
 		t.Error("falta el banner o la tabla")
 	}
-	if _, body = get(t, e.h, "/n/notes/a.md", nil); strings.Contains(body, `class="chg"`) || strings.Contains(body, bannerChanged) {
+	if _, body = get(t, e.h, "/k/principal/n/notes/a.md", nil); strings.Contains(body, `class="chg"`) || strings.Contains(body, bannerChanged) {
 		t.Error("tercera vista: no debe quedar nada marcado")
 	}
 
@@ -151,24 +152,24 @@ func TestSinLeer(t *testing.T) {
 	if err := os.WriteFile(abs, []byte("# A\n\nPrimer párrafo.\n\nOtro bloque.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, frag := get(t, e.h, "/n/notes/a.md?fragmento=1", nil)
+	_, frag := get(t, e.h, "/k/principal/n/notes/a.md?fragmento=1", nil)
 	if strings.Contains(frag, "<html") || !strings.Contains(frag, `<div class="chg"><p>Otro bloque.</p>`) {
 		t.Fatalf("fragmento = %s", frag)
 	}
-	if _, body = get(t, e.h, "/n/notes/a.md", nil); strings.Contains(body, `class="chg"`) {
+	if _, body = get(t, e.h, "/k/principal/n/notes/a.md", nil); strings.Contains(body, `class="chg"`) {
 		t.Error("el fragmento no marcó la nota como leída")
 	}
 }
 
 func TestNotaNuevaDesdeBaseline(t *testing.T) {
 	e := newLiveServer(t, true)
-	get(t, e.h, "/n/notes/a.md", nil) // fija el baseline
+	get(t, e.h, "/k/principal/n/notes/a.md", nil) // fija el baseline
 	time.Sleep(10 * time.Millisecond)
 	abs := filepath.Join(e.root, "notes/b.md")
 	if err := os.WriteFile(abs, []byte("# B\n\nCambiada.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, body := get(t, e.h, "/n/notes/b.md", nil)
+	_, body := get(t, e.h, "/k/principal/n/notes/b.md", nil)
 	if !strings.Contains(body, bannerNew) || strings.Contains(body, `class="chg"`) {
 		t.Fatal("nota nueva: quiero el banner sin resaltar bloques")
 	}
@@ -176,11 +177,11 @@ func TestNotaNuevaDesdeBaseline(t *testing.T) {
 
 func TestLectorSinState(t *testing.T) {
 	e := newLiveServer(t, false)
-	res, body := get(t, e.h, "/n/notes/a.md", nil)
+	res, body := get(t, e.h, "/k/principal/n/notes/a.md", nil)
 	if res.StatusCode != 200 || strings.Contains(body, `class="chg"`) {
 		t.Fatalf("status %d", res.StatusCode)
 	}
-	if _, frag := get(t, e.h, "/n/notes/a.md?fragmento=1", nil); strings.Contains(frag, "<html") || !strings.Contains(frag, "Primer párrafo") {
+	if _, frag := get(t, e.h, "/k/principal/n/notes/a.md?fragmento=1", nil); strings.Contains(frag, "<html") || !strings.Contains(frag, "Primer párrafo") {
 		t.Fatalf("fragmento = %s", frag)
 	}
 }
@@ -208,14 +209,14 @@ func TestDiffH1YFrontmatterPegados(t *testing.T) {
 			if err := os.WriteFile(abs, []byte(c.before), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if err := e.srv.Ix.Rebuild(e.srv.V); err != nil {
+			if err := e.srv.KBs.Default().Ix.Rebuild(e.srv.KBs.Default().V); err != nil {
 				t.Fatal(err)
 			}
-			get(t, e.h, "/n/notes/c.md", nil)
+			get(t, e.h, "/k/principal/n/notes/c.md", nil)
 			if err := os.WriteFile(abs, []byte(c.after), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			_, frag := get(t, e.h, "/n/notes/c.md?fragmento=1", nil)
+			_, frag := get(t, e.h, "/k/principal/n/notes/c.md?fragmento=1", nil)
 			if strings.Count(frag, `class="chg"`) != 1 || !strings.Contains(frag, `<div class="chg"><p>`+c.chg+`</p>`) {
 				t.Fatalf("quiero 1 bloque marcado (%q)\n%s", c.chg, frag)
 			}

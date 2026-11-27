@@ -9,6 +9,7 @@ import (
 
 	"github.com/duv0-x/scriba/internal/gitvault"
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/vault"
 )
 
@@ -60,12 +61,12 @@ func dashVault(t *testing.T, withGit bool) (*Server, int) {
 	if err := ix.Rebuild(v); err != nil {
 		t.Fatal(err)
 	}
-	return &Server{V: v, Ix: ix}, size
+	return &Server{KBs: oneKB(&kbs.KB{V: v, Ix: ix})}, size
 }
 
 func TestDashboard(t *testing.T) {
 	s, size := dashVault(t, true)
-	res, body := get(t, s.Handler(), "/", nil)
+	res, body := get(t, s.Handler(), "/k/principal/", nil)
 	if res.StatusCode != 200 {
 		t.Fatalf("status = %d\n%s", res.StatusCode, body)
 	}
@@ -82,9 +83,9 @@ func TestDashboard(t *testing.T) {
 		"2 contribuciones en el último año",
 		// actividad reciente
 		`<span class="who agent">opencode</span> <span class="verb">actualizó</span>`,
-		`<a href="/n/docs/otra.md">Otra</a>`,
+		`<a href="/k/principal/n/docs/otra.md">Otra</a>`,
 		`<span class="who agent">claude</span> <span class="verb">creó</span>`,
-		`<a href="/n/journal/hoy.md">Hoy</a>`,
+		`<a href="/k/principal/n/journal/hoy.md">Hoy</a>`,
 		// almacenamiento
 		"docs/</span>", "journal/</span>",
 		"<dt>Wikilinks resueltos</dt><dd>1 / 2</dd>",
@@ -101,7 +102,7 @@ func TestDashboard(t *testing.T) {
 	if strings.Contains(body, "role=\"status\"") {
 		t.Error("aviso sin ?aviso=historial")
 	}
-	_, body = get(t, s.Handler(), "/?aviso=historial", nil)
+	_, body = get(t, s.Handler(), "/k/principal/?aviso=historial", nil)
 	if !strings.Contains(body, avisoHistorial) {
 		t.Error("falta el aviso de historial")
 	}
@@ -109,7 +110,7 @@ func TestDashboard(t *testing.T) {
 
 func TestHeatmapRegionTeclado(t *testing.T) {
 	s, _ := dashVault(t, true)
-	_, body := get(t, s.Handler(), "/", nil)
+	_, body := get(t, s.Handler(), "/k/principal/", nil)
 	for _, want := range []string{
 		`class="heat-wrap" tabindex="0" role="region" aria-label="Historial anual de notas"`,
 		`class="heat-inner"`,
@@ -122,7 +123,7 @@ func TestHeatmapRegionTeclado(t *testing.T) {
 
 func TestDashboardSinGit(t *testing.T) {
 	s, _ := dashVault(t, false)
-	res, body := get(t, s.Handler(), "/", nil)
+	res, body := get(t, s.Handler(), "/k/principal/", nil)
 	if res.StatusCode != 200 {
 		t.Fatalf("status = %d\n%s", res.StatusCode, body)
 	}

@@ -23,6 +23,12 @@ type Resolver interface {
 	Resolve(raw string) (path string, ok bool)
 }
 
+// LinkBaser lo implementa un Resolver cuyos enlaces llevan prefijo (p. ej. "/k/ia-kb", ADR-013);
+// sin él, los wikilinks apuntan a /n/….
+type LinkBaser interface {
+	LinkBase() string
+}
+
 // Heading es un h2 o h3 de la nota, para el índice lateral.
 type Heading struct {
 	ID, Text string
@@ -103,6 +109,9 @@ func (w *wikilinkRenderer) render(out util.BufWriter, _ []byte, node ast.Node, e
 		segs[i] = url.PathEscape(s)
 	}
 	href := "/n/" + strings.Join(segs, "/") + frag
+	if b, ok := w.r.(LinkBaser); ok {
+		href = b.LinkBase() + href
+	}
 	// El texto (alias o destino crudo) lo emiten los hijos, que goldmark escapa como HTML.
 	_, _ = out.WriteString(`<a class="wl" href="` + template.HTMLEscapeString(href) + `">`)
 	return ast.WalkContinue, nil

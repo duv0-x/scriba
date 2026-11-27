@@ -1,0 +1,59 @@
+package web
+
+import "strconv"
+
+// kbsPage lista las bases de la instancia y permite crear y borrar.
+templ kbsPage(v kbsView) {
+	<div class="setup">
+		<div>
+			<h1>Bases de conocimiento</h1>
+			<p class="sub">Cada base tiene su propio repositorio git, su índice y su respaldo. Los agentes solo ven la base de su token.</p>
+		</div>
+		if v.Msg != "" {
+			<p class="alert" role="alert">{ v.Msg }</p>
+		}
+		for _, k := range v.KBs {
+			<section class="conn" aria-label={ "Base " + k.Slug }>
+				<div class="conn-head">
+					<h2><code>{ k.Slug }</code></h2>
+					if k.Default {
+						<span class="pill">Por defecto</span>
+					}
+				</div>
+				<p class="desc">
+					if k.Notes == 1 {
+						1 nota
+					} else {
+						{ strconv.Itoa(k.Notes) } notas
+					}
+				</p>
+				<div><a class="btn" href={ templ.SafeURL("/k/" + k.Slug + "/") } hx-boost="false">Abrir</a></div>
+				if !k.Default {
+					<form hx-boost="false" method="post" action="/kbs/borrar" class="row">
+						<input type="hidden" name="slug" value={ k.Slug }/>
+						<input type="text" name="confirm" autocomplete="off" required spellcheck="false" placeholder={ k.Slug } aria-label={ "Escribe " + k.Slug + " para confirmar el borrado" }/>
+						<button class="btn danger" type="submit">Borrar</button>
+					</form>
+					<p class="note">Borra el directorio de la base y su historial local. El repositorio de GitHub no se toca.</p>
+				}
+			</section>
+		}
+		<section class="conn">
+			<h2>Crear una base</h2>
+			<form hx-boost="false" method="post" action="/kbs" enctype="multipart/form-data" class="fields">
+				<label>
+					Slug
+					<input type="text" name="slug" required pattern="[a-z0-9][a-z0-9\-]{0,39}" maxlength="40" autocomplete="off" spellcheck="false" aria-describedby="kbs-slug-ayuda"/>
+				</label>
+				<p class="note" id="kbs-slug-ayuda">Minúsculas, números y guiones; hasta 40 caracteres. No se puede cambiar después.</p>
+				<fieldset class="opts">
+					<legend>Contenido inicial</legend>
+					<label class="opt"><input type="radio" name="origen" value="plantilla" checked/> Vacía, con la plantilla</label>
+					<label class="opt"><input type="radio" name="origen" value="zip"/> Desde un .zip (máximo 200 MB)</label>
+				</fieldset>
+				<input type="file" name="zip" accept=".zip,application/zip" aria-label="Archivo .zip"/>
+				<div><button class="btn primary" type="submit">Crear base</button></div>
+			</form>
+		</section>
+	</div>
+}

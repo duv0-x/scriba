@@ -16,11 +16,9 @@ import (
 
 const heartbeat = 25 * time.Second
 
-// liveRoutes registra el tiempo real (PR3b, T2).
+// liveRoutes registra el tiempo real; la KB puede no tener Bus y se comprueba por petición.
 func (s *Server) liveRoutes(mux *http.ServeMux) {
-	if s.Bus != nil {
-		mux.HandleFunc("GET /events", s.events)
-	}
+	mux.HandleFunc("GET /k/{kb}/events", s.kb((*kbServer).events))
 }
 
 type liveEvent struct {
@@ -36,7 +34,11 @@ type livePresence struct {
 
 // events es el stream SSE: "changed" por cada cambio y "presence" al conectar y tras cada evento.
 // Nunca envía contenido de notas.
-func (s *Server) events(w http.ResponseWriter, r *http.Request) {
+func (s *kbServer) events(w http.ResponseWriter, r *http.Request) {
+	if s.Bus == nil {
+		http.NotFound(w, r)
+		return
+	}
 	ch, cancel := s.Bus.Subscribe(32)
 	defer cancel()
 	rc := http.NewResponseController(w)
@@ -90,7 +92,7 @@ const (
 
 // readView renderiza el cuerpo de la nota para user y la marca como leída: si cambió desde su
 // última lectura, resalta con .chg los bloques nuevos. Sin State, render normal sin banner.
-func (s *Server) readView(r *http.Request, n *vault.Note, raw string, res resolver) (template.HTML, []render.Heading, string, error) {
+func (s *kbServer) readView(r *http.Request, n *vault.Note, raw string, res resolver) (template.HTML, []render.Heading, string, error) {
 	md := dropLeadingH1(n)
 	if s.State == nil {
 		body, hs, err := render.HTML(md, res)
@@ -99,7 +101,7 @@ func (s *Server) readView(r *http.Request, n *vault.Note, raw string, res resolv
 	u, now, sum := user(r), time.Now(), hash(raw)
 	var old map[string]bool
 	banner := ""
-	last, ok, err := s.State.LastRead(s.KB, u, n.Path)
+	last, ok, err := s.State.LastRead(s.Slug, u, n.Path)
 	if err != nil {
 		slog.Warn("web: última lectura", "err", err)
 	}
@@ -115,7 +117,7 @@ func (s *Server) readView(r *http.Request, n *vault.Note, raw string, res resolv
 			banner = bannerNew
 		}
 	}
-	if err := s.State.MarkRead(s.KB, u, n.Path, sum, raw, now); err != nil {
+	if err := s.State.MarkRead(s.Slug, u, n.Path, sum, raw, now); err != nil {
 		slog.Warn("web: marcar leída", "err", err)
 	}
 	if old == nil {
@@ -203,7 +205,7 @@ func mdBlocks(md string) []string {
 // markTree marca en el árbol las notas sin leer de user y las que un agente está escribiendo.
 // shortcut: lee y hashea cada nota con lectura registrada y hace os.Stat del resto (NoteRef no
 // trae mtime); vale para ~500 notas, para más exponer mtime y hash en el índice.
-func (s *Server) markTree(r *http.Request, tree []treeNode) {
+func (s *kbServer) markTree(r *http.Request, tree []treeNode) {
 	writing := map[string]bool{}
 	if s.Presence != nil {
 		for _, a := range s.Presence.Active() {
@@ -216,7 +218,7 @@ func (s *Server) markTree(r *http.Request, tree []treeNode) {
 	if s.State != nil && len(tree) > 0 {
 		u := user(r)
 		var err error
-		if hashes, err = s.State.ReadHashes(s.KB, u); err != nil {
+		if hashes, err = s.State.ReadHashes(s.Slug, u); err != nil {
 			slog.Warn("web: lecturas", "err", err)
 			hashes = nil
 		} else if base, err = s.State.Baseline(u, time.Now()); err != nil {
@@ -241,7 +243,7 @@ func (s *Server) markTree(r *http.Request, tree []treeNode) {
 	walk(tree)
 }
 
-func (s *Server) unread(p string, hashes map[string]string, base time.Time) bool {
+func (s *kbServer) unread(p string, hashes map[string]string, base time.Time) bool {
 	abs, err := s.V.Abs(p)
 	if err != nil {
 		return false

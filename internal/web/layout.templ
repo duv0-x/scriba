@@ -17,6 +17,7 @@ templ layout(sh shell, title string, content templ.Component) {
 			<script src={ asset("theme.js") }></script>
 		</head>
 		<body
+				data-base={ kbBase(ctx) }
 			if sh.View != "editor" {
 				hx-boost:inherited="target:.view select:.view swap:outerHTML"
 			}
@@ -28,7 +29,7 @@ templ layout(sh shell, title string, content templ.Component) {
 						<button type="button" class="menu-button nav-toggle" popovertarget="nav-drawer" aria-controls="nav-drawer" aria-label="Abrir navegación">
 							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
 						</button>
-						<form class="search" action="/buscar" role="search">
+						<form class="search" action={ templ.SafeURL(kbBase(ctx) + "/buscar") } role="search">
 							<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
 							<input
 								id="q"
@@ -37,7 +38,7 @@ templ layout(sh shell, title string, content templ.Component) {
 								placeholder="Buscar en la base de conocimiento"
 								aria-label="Buscar"
 								autocomplete="off"
-								hx-get="/buscar"
+								hx-get={ kbBase(ctx) + "/buscar" }
 								hx-trigger="input changed delay:150ms, search"
 								hx-target="#resultados"
 							/>
@@ -93,7 +94,7 @@ templ layout(sh shell, title string, content templ.Component) {
 						const f = document.activeElement;
 						if (fromDrawer || !f || f === document.body || !f.isConnected) v.focus({ preventScroll: true });
 						document.querySelectorAll(".tree a[aria-current]").forEach((a) => a.removeAttribute("aria-current"));
-						document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("on", !cur && a.dataset.v === view));
+						document.querySelectorAll(".nav a, .kbpick .manage a").forEach((a) => a.classList.toggle("on", !cur && a.dataset.v === view));
 						const a = cur && document.querySelector(`.tree a[data-path="${CSS.escape(cur)}"]`);
 						if (!a) return;
 						a.setAttribute("aria-current", "page");
@@ -108,20 +109,43 @@ templ layout(sh shell, title string, content templ.Component) {
 
 templ sidebar(sh shell) {
 	<aside class="side" id="nav-drawer" popover="auto" aria-label="Navegación">
-		<a class="brand" href="/">
+		<a class="brand" href={ templ.SafeURL(kbBase(ctx) + "/") }>
 			@templ.Raw(logoSVG)
 			Scriba
 		</a>
+		<div class="kbsel">
+			<h2 class="eyebrow" id="kbsel-h">Base</h2>
+			<details class="kbpick">
+				<summary aria-describedby="kbsel-h">
+					<code>{ sh.KB }</code>
+					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+				</summary>
+				<ul>
+					for _, slug := range sh.KBs {
+						<li>
+							<a
+								href={ templ.SafeURL("/k/" + slug + "/") }
+								hx-boost="false"
+								if slug == sh.KB {
+									aria-current="page"
+								}
+							><code>{ slug }</code></a>
+						</li>
+					}
+					<li class="manage"><a href="/kbs" data-v="kbs" class={ templ.KV("on", sh.View == "kbs") }>Gestionar bases</a></li>
+				</ul>
+			</details>
+		</div>
 		<div>
 			<h2 class="eyebrow">Vistas</h2>
 			<nav class="nav">
-				<a href="/" class={ templ.KV("on", sh.Current == "" && sh.View == "") } data-v="">
+				<a href={ templ.SafeURL(kbBase(ctx) + "/") } class={ templ.KV("on", sh.Current == "" && sh.View == "") } data-v="">
 					<span class="vl">
 						@templ.Raw(navActividadSVG)
 						Actividad
 					</span>
 				</a>
-				<a href="/grafo" class={ templ.KV("on", sh.View == "grafo") } data-v="grafo">
+				<a href={ templ.SafeURL(kbBase(ctx) + "/grafo") } class={ templ.KV("on", sh.View == "grafo") } data-v="grafo">
 					<span class="vl">
 						@templ.Raw(navGrafoSVG)
 						Grafo
@@ -164,7 +188,7 @@ templ treeList(nodes []treeNode) {
 			</details>
 		} else {
 			<a
-				href={ noteHref(n.Path) }
+				href={ noteHref(ctx, n.Path) }
 				data-path={ n.Path }
 				if n.Unread || n.Writing {
 					class={ templ.KV("unread", n.Unread), templ.KV("writing", n.Writing) }

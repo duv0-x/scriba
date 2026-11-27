@@ -4,8 +4,9 @@
   if (!window.EventSource) return;
   const badge = document.getElementById("live");
   const still = matchMedia("(prefers-reduced-motion: reduce)");
+  const base = document.body.dataset.base || "";
   const links = (p) => document.querySelectorAll(`.tree a[data-path="${CSS.escape(p)}"]`);
-  const href = (p) => "/n/" + p.split("/").map(encodeURIComponent).join("/");
+  const href = (p) => base + "/n/" + p.split("/").map(encodeURIComponent).join("/");
 
   function presence(list) {
     const paths = new Set(list.map((a) => a.path));
@@ -102,7 +103,7 @@
     prose.before(p);
   }
 
-  const es = new EventSource("/events");
+  const es = new EventSource(base + "/events");
   // Una sola conexión SSE por pestaña: el grafo escucha "scriba:presence" en vez de abrir otra.
   es.addEventListener("presence", (e) => {
     const list = JSON.parse(e.data) || [];

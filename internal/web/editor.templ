@@ -3,14 +3,14 @@ package web
 // editorPage es el editor web: barra fina con la ruta y las acciones, y debajo el split
 // Markdown / vista previa.
 templ editorPage(v editorView) {
-	<form class="editor" id="editor" method="post" action={ editHref(v.Path) } data-path={ v.Path } data-dirty?={ v.Dirty }>
+	<form class="editor" id="editor" method="post" action={ editHref(ctx, v.Path) } data-path={ v.Path } data-dirty?={ v.Dirty }>
 		<div class="editbar">
 			<span class="editing">Editando <code>{ v.Path }</code></span>
 			if v.Agent != "" {
 				<span class="edit-note" role="status">{ v.Agent } escribió en esta nota hace un momento; si guardas, se conserva el cambio más reciente</span>
 			}
 			<input class="edit-msg" type="text" name="message" value={ v.Message } placeholder="Mensaje del commit (opcional)" aria-label="Mensaje del commit" maxlength="200"/>
-			<a class="btn" href={ noteHref(v.Path) }>Cancelar</a>
+			<a class="btn" href={ noteHref(ctx, v.Path) }>Cancelar</a>
 			<button class="btn primary" type="submit" title="Guardar (Ctrl/⌘+S)">Guardar</button>
 		</div>
 		if v.Alert != "" {
