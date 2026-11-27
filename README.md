@@ -12,7 +12,7 @@ Primera release: `v0.1.0`. El MVP está completo; ver [releases](https://github.
 go run ./cmd/scriba serve --data <dir>
 ```
 
-En `<dir>` Scriba guarda `state.db` (conectores y agentes), `secret.key` (llave de cifrado, `0600`) y una carpeta por base en `kbs/<slug>/` con su `vault/` (repo git) y su `index.db` (índice reconstruible). Si no hay ninguna base, crea `principal` y abre la bienvenida: crear una base nueva, importarla desde GitHub o subir un `.zip` (Obsidian o carpetas locales). Una instancia con el layout de un solo vault (`<dir>/vault`) se migra sola al arrancar; `--vault` sigue un release como compatibilidad. Ver [ADR-013](docs/adr/ADR-013-varias-kbs-registry.md).
+En `<dir>` Scriba guarda `state.db` (conectores y agentes), `secret.key` (llave de cifrado, `0600`) y una carpeta por base en `kbs/<slug>/` con su `vault/` (repo git) y su `index.db` (índice reconstruible). Si no hay ninguna base, crea `principal` y abre la bienvenida: crear una base nueva, importarla desde GitHub o subir un `.zip` (Obsidian o carpetas locales). Una instancia con el layout de un solo vault (`<dir>/vault`) se migra sola al arrancar con `--data <dir>`; `--vault` y `--db` se retiraron (desde v0.8.0). Ver [ADR-013](docs/adr/ADR-013-varias-kbs-registry.md).
 
 ## Instalar con systemd
 

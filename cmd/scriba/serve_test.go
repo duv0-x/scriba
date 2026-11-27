@@ -231,47 +231,44 @@ func TestServeLayoutViejo(t *testing.T) {
 	}
 }
 
-// TestServeCompatVault: --vault/--db del layout viejo migran aunque el vault no se llame "vault".
-func TestServeCompatVault(t *testing.T) {
-	dir := t.TempDir()
-	oldVault := filepath.Join(dir, "v2")
-	if err := os.MkdirAll(filepath.Join(oldVault, "notas"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(oldVault, "notas", "hola.md"), []byte("---\ntitle: Hola\n---\n\nzanahoria\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan error, 1)
-	go func() {
-		done <- runServe(ctx, serveOpts{data: dir, oldVault: oldVault, oldIndex: filepath.Join(dir, "scriba.db"), clientID: "x", tz: "UTC", ln: ln})
-	}()
-	waitReady(t, "http://"+ln.Addr().String())
-	if _, err := os.Stat(filepath.Join(dir, "kbs", "principal", "vault", "notas", "hola.md")); err != nil {
-		t.Fatalf("nota migrada: %v", err)
-	}
-	cancel()
-	if err := <-done; err != nil {
-		t.Fatalf("runServe: %v", err)
-	}
-}
-
 func TestServeFlagsVacios(t *testing.T) {
 	dir := t.TempDir()
 	for _, args := range [][]string{
 		{},
+		{"--vault", filepath.Join(dir, "vault")},
 		{"--data", dir, "--vault", filepath.Join(dir, "vault")},
-		{"--data", dir, "--db", filepath.Join(dir, "scriba.db")},
+		{"--db", filepath.Join(dir, "scriba.db")},
 		{"--data", dir, "--listen", ""},
 		{"--data", dir, "--tz", ""},
 	} {
 		if code := serve(args); code != 2 {
 			t.Errorf("serve %v = %d, quiero 2", args, code)
 		}
+	}
+}
+
+// TestServeVaultRetirado: --vault/--db ya no existen; el error apunta a --data.
+func TestServeVaultRetirado(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = old })
+
+	code := serve([]string{"--vault", t.TempDir()})
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code != 2 {
+		t.Fatalf("serve --vault = %d, quiero 2", code)
+	}
+	if !strings.Contains(string(out), "--data") {
+		t.Fatalf("stderr sin --data: %q", out)
 	}
 }

@@ -27,8 +27,8 @@ import (
 func serve(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	data := fs.String("data", "", "directorio de datos: state.db, secret.key y kbs/<slug>/")
-	vaultDir := fs.String("vault", "", "obsoleto: directorio del vault de un solo vault; usa --data")
-	db := fs.String("db", "", "obsoleto: índice del layout de un solo vault (con --vault)")
+	vaultDir := fs.String("vault", "", "retirado: usa --data")
+	db := fs.String("db", "", "retirado: usa --data")
 	listen := fs.String("listen", "127.0.0.1:8090", "dirección de escucha HTTP")
 	clientID := fs.String("github-client-id", github.DefaultClientID, "client_id (público) de la OAuth App de GitHub con Device Flow")
 	publicURL := fs.String("public-url", "", "URL pública de la instancia (para enlaces de kb_open y el comando de conexión); vacío = la de cada petición")
@@ -37,15 +37,12 @@ func serve(args []string) int {
 		return 2
 	}
 	switch {
-	case *data == "" && *vaultDir == "":
+	case *vaultDir != "" || *db != "":
+		fmt.Fprintln(os.Stderr, "serve: --vault y --db se retiraron (ADR-013): usa --data <dir>, el directorio que contiene state.db (en el layout viejo, el padre del vault)")
+		return 2
+	case *data == "":
 		fmt.Fprintln(os.Stderr, "serve: usa --data <dir>")
 		fs.Usage()
-		return 2
-	case *data != "" && *vaultDir != "":
-		fmt.Fprintln(os.Stderr, "serve: --data y --vault no van juntos")
-		return 2
-	case *vaultDir == "" && *db != "":
-		fmt.Fprintln(os.Stderr, "serve: --db solo vale con --vault")
 		return 2
 	}
 	// Vacíos llegan desde systemd cuando falta la variable en scriba.env: "" escucharía en todas las
@@ -56,25 +53,6 @@ func serve(args []string) int {
 	}
 
 	o := serveOpts{data: *data, listen: *listen, clientID: *clientID, publicURL: *publicURL, tz: *tz}
-	if *vaultDir != "" {
-		// Compatibilidad con el layout de un solo vault (ADR-013): dura un release.
-		v, err := filepath.Abs(*vaultDir)
-		if err != nil {
-			slog.Error("serve: --vault", "err", err)
-			return 2
-		}
-		o.oldVault = v
-		o.oldIndex = *db
-		if o.oldIndex == "" {
-			o.oldIndex = filepath.Join(filepath.Dir(v), "scriba.db")
-		} else if o.oldIndex, err = filepath.Abs(o.oldIndex); err != nil {
-			slog.Error("serve: --db", "err", err)
-			return 2
-		}
-		// state.db queda donde estaba: junto al índice viejo.
-		o.data = filepath.Dir(o.oldIndex)
-		slog.Warn("--vault está obsoleto: usa --data", "data", o.data)
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -86,8 +64,8 @@ func serve(args []string) int {
 }
 
 type serveOpts struct {
-	data, oldVault, oldIndex, listen, clientID, publicURL, tz string
-	ln                                                        net.Listener // si no es nil se usa en vez de listen (tests)
+	data, listen, clientID, publicURL, tz string
+	ln                                    net.Listener // si no es nil se usa en vez de listen (tests)
 }
 
 // runServe sirve hasta que ctx se cancele o un watcher muera.
@@ -112,7 +90,7 @@ func runServe(ctx context.Context, o serveOpts) error {
 	if err != nil {
 		return err
 	}
-	reg, err := kbs.Open(ctx, kbs.Config{Data: o.data, State: st, Key: key, Loc: loc, OldVault: o.oldVault, OldIndex: o.oldIndex})
+	reg, err := kbs.Open(ctx, kbs.Config{Data: o.data, State: st, Key: key, Loc: loc})
 	if err != nil {
 		return err
 	}
