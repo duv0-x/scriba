@@ -1306,6 +1306,19 @@
   .title-actions .alert {
     margin-top: 6px;
   }
+  /* Móvil (drawer, ADR-011): .title-actions tiene min-width: 0 y el botón se montaba sobre el título; se apilan. */
+  @media (max-width: 720px) {
+    .title-row {
+      flex-direction: column;
+      gap: 8px;
+    }
+    .title-actions {
+      justify-content: flex-start;
+    }
+    .doc-title {
+      overflow-wrap: anywhere;
+    }
+  }
   /* PR3b dashboard */
   .dash {
     --heat-0: var(--code-bg);
