@@ -22,6 +22,8 @@ type Event struct {
 	Path  string
 	Agent string
 	At    time.Time
+	// SHA-256 hex del contenido escrito ("" en avisos de disco y borrados)
+	Hash string
 }
 
 // Bus reparte eventos a los suscriptores sin bloquear nunca al publicador.

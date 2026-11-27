@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /static/{file...}", serveStatic(files))
 	mux.HandleFunc("GET /k/{kb}/{$}", s.kb((*kbServer).dashboard))
 	mux.HandleFunc("GET /k/{kb}/n/{path...}", s.kb((*kbServer).note))
+	mux.HandleFunc("PUT /k/{kb}/n/{path...}", s.kb((*kbServer).autosave))
 	mux.HandleFunc("GET /k/{kb}/buscar", s.kb((*kbServer).search))
 	mux.HandleFunc("POST /k/{kb}/kindle/{path...}", s.kb((*kbServer).kindleNote))
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
@@ -208,6 +209,14 @@ func (s *kbServer) note(w http.ResponseWriter, r *http.Request) {
 			res.m[l.Raw] = l.Dst
 		}
 	}
+	// Datos del editor en línea (ADR-014); nil en las KB sin Writer.
+	var edit *noteEdit
+	if s.W != nil {
+		edit = &noteEdit{Raw: string(raw), Base: hash(string(raw)), Links: res.m}
+		if s.Presence != nil {
+			edit.Agent, _ = s.Presence.Writing(n.Path)
+		}
+	}
 	body, headings, banner, err := s.readView(r, n, string(raw), res)
 	if err != nil {
 		serverError(w, err)
@@ -235,7 +244,7 @@ func (s *kbServer) note(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	page(w, r, http.StatusOK, layout(sh, n.Title+" · Scriba", readerPage(n, body, headings, back, banner, s.W != nil, kindleOn)))
+	page(w, r, http.StatusOK, layout(sh, n.Title+" · Scriba", readerPage(n, body, headings, back, banner, edit, kindleOn)))
 }
 
 // readNote solo sirve .md fuera de directorios ocultos: el vault es un repo git y .git/config no es una nota.

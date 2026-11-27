@@ -91,10 +91,10 @@ func TestEventsSSE(t *testing.T) {
 	if d := next("presence"); d != "data: []" {
 		t.Fatalf("presence inicial = %q", d)
 	}
-	ev := events.Event{Kind: events.Changed, Path: "notes/a.md", Agent: "claude", At: time.Now()}
+	ev := events.Event{Kind: events.Changed, Path: "notes/a.md", Agent: "claude", At: time.Now(), Hash: "h1"}
 	e.srv.KBs.Default().Presence.Observe(ev)
 	e.srv.KBs.Default().Bus.Publish(ev)
-	if d := next("changed"); d != `data: {"path":"notes/a.md","agent":"claude","kind":"changed"}` {
+	if d := next("changed"); d != `data: {"path":"notes/a.md","agent":"claude","kind":"changed","hash":"h1"}` {
 		t.Fatalf("changed = %q", d)
 	}
 	if d := next("presence"); !strings.Contains(d, `"agent":"claude"`) || !strings.Contains(d, `"path":"notes/a.md"`) {

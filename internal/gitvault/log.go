@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// agentSuffix es lo que CommitAll añade al nombre del agente.
+// agentSuffix es lo que CommitAll y CommitPaths añaden al nombre del agente.
 const agentSuffix = " via Scriba"
 
 // Commit es un commit del vault. Agent indica que lo hizo Scriba en nombre de

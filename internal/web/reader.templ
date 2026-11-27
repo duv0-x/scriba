@@ -9,18 +9,21 @@ import (
 	"github.com/duv0-x/scriba/internal/vault"
 )
 
-templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, back []index.NoteRef, banner string, editable bool, kindle bool) {
+templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, back []index.NoteRef, banner string, edit *noteEdit, kindle bool) {
 	<div class="reader" data-note={ n.Path }>
+		if edit != nil {
+			@templ.JSONScript("nota-editable", edit)
+		}
 		<article>
 			<div class="crumbs">{ n.Path }</div>
 			<div class="title-row">
 				<h1 class="doc-title">{ n.Title }</h1>
-				if editable || kindle {
+				if edit != nil || kindle {
 					<div class="title-actions">
 						if kindle {
 							@kindleButton(kindleHref(ctx, n.Path), "Enviar a Kindle")
 						}
-						if editable {
+						if edit != nil {
 							<a class="btn" href={ editHref(ctx, n.Path) } hx-boost="false">Editar</a>
 						}
 					</div>

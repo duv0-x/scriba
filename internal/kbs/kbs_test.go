@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -60,6 +61,16 @@ func writeNote(t *testing.T, dir, body string) {
 	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// gitOut ejecuta git en dir y devuelve la salida recortada.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestValidSlug(t *testing.T) {
@@ -492,5 +503,75 @@ func TestCreateFill(t *testing.T) {
 	}
 	if _, ok := r.Get("y"); ok {
 		t.Fatal("Get encuentra la KB fallida")
+	}
+}
+
+// TestBarridoAlAbrir: un cambio hecho a mano con Scriba apagado se commitea como
+// web al arrancar, y el vault queda limpio.
+func TestBarridoAlAbrir(t *testing.T) {
+	dir := t.TempDir()
+	st, key := newState(t, dir)
+	r := openRegistry(t, dir, st, key)
+	k, err := r.Create("a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.W.Write("claude", "notas/x.md", "primera versión", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	vaultDir := filepath.Join(dir, "kbs", "a", "vault")
+	if got := gitOut(t, vaultDir, "log", "-1", "--format=%an|%s"); got != "claude via Scriba|claude: crea notas/x.md" {
+		t.Fatalf("log antes del barrido: %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(vaultDir, "notas", "x.md"), []byte("cambiado a mano\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	openRegistry(t, dir, st, key) // segunda apertura: el barrido commitea lo que quedó sucio
+	if got := gitOut(t, vaultDir, "status", "--porcelain"); got != "" {
+		t.Fatalf("status: %q", got)
+	}
+	if got := gitOut(t, vaultDir, "log", "-1", "--format=%an|%s"); got != "web via Scriba|web: actualiza notas/x.md" {
+		t.Fatalf("log tras el barrido: %q", got)
+	}
+}
+
+// TestCloseHaceCommitsWebPendientes: los guardados web sin commitear se commitean
+// al cerrar el Registry.
+func TestCloseHaceCommitsWebPendientes(t *testing.T) {
+	dir := t.TempDir()
+	st, key := newState(t, dir)
+	r := openRegistry(t, dir, st, key)
+	k, err := r.Create("a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := k.W.Write("claude", "notas/x.md", "primera versión", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.W.Autosave("notas/x.md", "nuevo", res.Hash); err != nil {
+		t.Fatal(err)
+	}
+
+	vaultDir := filepath.Join(dir, "kbs", "a", "vault")
+	if got := gitOut(t, vaultDir, "status", "--porcelain"); got != "M notas/x.md" {
+		t.Fatalf("el guardado web no quedó pendiente de commit: %q", got)
+	}
+	if got := gitOut(t, vaultDir, "log", "-1", "--format=%an|%s"); got != "claude via Scriba|claude: crea notas/x.md" {
+		t.Fatalf("el guardado web ya había commiteado: %q", got)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, vaultDir, "status", "--porcelain"); got != "" {
+		t.Fatalf("status tras Close: %q", got)
+	}
+	if got := gitOut(t, vaultDir, "log", "-1", "--format=%an|%s"); got != "web via Scriba|web: actualiza notas/x.md" {
+		t.Fatalf("log tras Close: %q", got)
 	}
 }

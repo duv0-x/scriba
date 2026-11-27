@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,11 +35,25 @@ var emptyHooksDir = sync.OnceValues(func() (string, error) {
 	return os.MkdirTemp("", "scriba-nohooks-")
 })
 
-// run ejecuta git en dir y devuelve stdout. El error incluye stderr saneado.
+// run ejecuta git en dir y devuelve stdout recortado. El error incluye stderr
+// saneado.
+func run(ctx context.Context, dir string, cred Cred, args ...string) (string, error) {
+	out, err := runRaw(ctx, dir, cred, args...)
+	return strings.TrimSpace(out), err
+}
+
+// runRaw ejecuta git en dir y devuelve stdout sin recortar (lo necesitan
+// salidas con -z o espacios significativos, como status --porcelain).
+func runRaw(ctx context.Context, dir string, cred Cred, args ...string) (string, error) {
+	return runRawStdin(ctx, dir, cred, "", args...)
+}
+
+// runRawStdin es runRaw alimentando stdin con input (lo necesita
+// check-ignore --stdin -z, que no acepta -z con rutas por argumentos).
 // Neutraliza la config que ejecuta código o guarda credenciales: fsmonitor,
 // hooks, credential helpers (el token solo llega por GIT_ASKPASS) y la config
 // global y de sistema del usuario.
-func run(ctx context.Context, dir string, cred Cred, args ...string) (string, error) {
+func runRawStdin(ctx context.Context, dir string, cred Cred, input string, args ...string) (string, error) {
 	hooks, err := emptyHooksDir()
 	if err != nil {
 		return "", fmt.Errorf("gitvault: hooks: %w", err)
@@ -48,6 +63,7 @@ func run(ctx context.Context, dir string, cred Cred, args ...string) (string, er
 	safe := []string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + hooks, "-c", "credential.helper="}
 	cmd := exec.CommandContext(ctx, "git", append(safe, args...)...)
 	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(input)
 	// exec.Cmd se queda con el último valor de cada variable repetida.
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C", "GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CONFIG_GLOBAL="+os.DevNull)
@@ -66,13 +82,29 @@ func run(ctx context.Context, dir string, cred Cred, args ...string) (string, er
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		msg := fmt.Sprintf("gitvault: git %s: %v: %s", args[0], err, strings.TrimSpace(stderr.String()))
+		msg := fmt.Sprintf("gitvault: git %s: %v: %s", subcomando(args), err, strings.TrimSpace(stderr.String()))
 		if cred.Token != "" {
 			msg = strings.ReplaceAll(msg, cred.Token, "***")
 		}
 		return "", errors.New(msg)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return stdout.String(), nil
+}
+
+// subcomando devuelve el primer argumento que no es opción ("add", "commit"...)
+// para que los errores no digan "git --literal-pathspecs". Tras "-c" va su
+// valor, que también se salta.
+func subcomando(args []string) string {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-c" {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(args[i], "-") {
+			return args[i]
+		}
+	}
+	return args[0]
 }
 
 // IsRepo indica si dir es la raíz de un repositorio git.
@@ -143,6 +175,100 @@ func CommitAll(dir, author, msg string) (hash string, committed bool, err error)
 	return hash, err == nil, err
 }
 
+// CommitPaths hace commit solo de paths (añadidos, modificados o borrados),
+// sin tocar lo que haya cambiado o esté en el índice fuera de ellos. Las
+// rutas son literales (--literal-pathspecs: ni globs ni magia ':'). Las rutas
+// ignoradas por .gitignore se saltan en silencio, como hace CommitAll. Sin
+// cambios en paths no hace commit.
+func CommitPaths(dir, author, msg string, paths ...string) (hash string, committed bool, err error) {
+	if len(paths) == 0 {
+		return "", false, nil
+	}
+	ctx := context.Background()
+	ign, err := ignoradas(ctx, dir, paths)
+	if err != nil {
+		return "", false, err
+	}
+	if len(ign) > 0 {
+		skip := make(map[string]bool, len(ign))
+		for _, p := range ign {
+			skip[p] = true
+		}
+		var filtradas []string
+		for _, p := range paths {
+			if !skip[p] {
+				filtradas = append(filtradas, p)
+			}
+		}
+		paths = filtradas
+	}
+	if len(paths) == 0 {
+		return "", false, nil
+	}
+	addArgs := append([]string{"--literal-pathspecs", "add", "-A", "--"}, paths...)
+	if _, err := run(ctx, dir, Cred{}, addArgs...); err != nil {
+		return "", false, err
+	}
+	diffArgs := append([]string{"--literal-pathspecs", "diff", "--cached", "--name-only", "--"}, paths...)
+	out, err := run(ctx, dir, Cred{}, diffArgs...)
+	if err != nil {
+		return "", false, err
+	}
+	if out == "" {
+		return "", false, nil
+	}
+	commitArgs := append([]string{"--literal-pathspecs",
+		"-c", "user.name=" + author + " via Scriba", "-c", "user.email=scriba@localhost",
+		"-c", "commit.gpgsign=false", "commit", "-q", "-m", msg, "--"}, paths...)
+	if _, err := run(ctx, dir, Cred{}, commitArgs...); err != nil {
+		return "", false, err
+	}
+	hash, err = Head(dir)
+	return hash, err == nil, err
+}
+
+// ignoradas devuelve las rutas de paths que el .gitignore del repo ignora.
+// check-ignore sale con exit 1 cuando ninguna lo está: no es un fallo. Con -z
+// (que exige --stdin) las rutas con caracteres no ASCII no salen
+// entrecomilladas (core.quotePath).
+func ignoradas(ctx context.Context, dir string, paths []string) ([]string, error) {
+	input := strings.Join(paths, "\x00") + "\x00"
+	out, err := runRawStdin(ctx, dir, Cred{}, input, "check-ignore", "--stdin", "-z")
+	if err != nil {
+		if strings.Contains(err.Error(), "exit status 1") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var rutas []string
+	for _, e := range strings.Split(out, "\x00") {
+		if e != "" {
+			rutas = append(rutas, e)
+		}
+	}
+	return rutas, nil
+}
+
+// Dirty devuelve, ordenadas, las rutas (relativas, con '/') con cambios sin
+// commit: modificadas, nuevas (sin ignorar las de subdirectorios) o borradas.
+func Dirty(dir string) ([]string, error) {
+	out, err := runRaw(context.Background(), dir, Cred{},
+		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, e := range strings.Split(out, "\x00") {
+		if e == "" {
+			continue
+		}
+		// Cada entrada es "XY ruta": la ruta empieza en el tercer carácter.
+		paths = append(paths, e[3:])
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
 // Head devuelve el hash del commit actual.
 func Head(dir string) (string, error) {
 	return run(context.Background(), dir, Cred{}, "rev-parse", "HEAD")
@@ -167,16 +293,43 @@ func Pull(ctx context.Context, dir string, cred Cred) error {
 	if err != nil || !ok {
 		return err
 	}
+	// Con commits web diferidos el árbol puede estar sucio y pull --rebase sin
+	// autostash se niega.
 	_, err = run(ctx, dir, cred, "-c", "user.name=Scriba", "-c", "user.email=scriba@localhost",
-		"-c", "commit.gpgsign=false", "pull", "--rebase", "-q")
-	if err != nil && rebasing(dir) {
-		// Un rebase a medias deja el vault en detached HEAD con marcas de conflicto: se deshace.
-		if _, aerr := run(context.Background(), dir, Cred{}, "rebase", "--abort"); aerr != nil {
-			return fmt.Errorf("conflicto con origin: falló el rebase --abort (%v): %w", aerr, err)
+		"-c", "commit.gpgsign=false", "pull", "--rebase", "--autostash", "-q")
+	if err != nil {
+		if rebasing(dir) {
+			// Un rebase a medias deja el vault en detached HEAD con marcas de conflicto: se deshace.
+			if _, aerr := run(context.Background(), dir, Cred{}, "rebase", "--abort"); aerr != nil {
+				return fmt.Errorf("conflicto con origin: falló el rebase --abort (%v): %w", aerr, err)
+			}
+			return fmt.Errorf("conflicto con origin: se abortó el rebase: %w", err)
 		}
-		return fmt.Errorf("conflicto con origin: se abortó el rebase: %w", err)
+		return err
 	}
-	return err
+	// Si al reaplicar el stash del autostash hay conflicto, git sale con exit 0
+	// y deja rutas unmerged con marcas <<<<<<< en disco: se dejan en la versión
+	// de HEAD (el cambio local queda en git stash) y se avisa.
+	// Con -z las rutas con caracteres no ASCII no salen entrecomilladas
+	// (core.quotePath).
+	out, err := runRaw(ctx, dir, Cred{}, "diff", "--name-only", "--diff-filter=U", "-z")
+	if err != nil {
+		return err
+	}
+	var rutas []string
+	for _, e := range strings.Split(out, "\x00") {
+		if e != "" {
+			rutas = append(rutas, e)
+		}
+	}
+	if len(rutas) == 0 {
+		return nil
+	}
+	checkout := append([]string{"--literal-pathspecs", "checkout", "HEAD", "--"}, rutas...)
+	if _, err := run(ctx, dir, Cred{}, checkout...); err != nil {
+		return err
+	}
+	return fmt.Errorf("conflicto al reaplicar cambios locales en %s: quedaron en git stash", strings.Join(rutas, ", "))
 }
 
 // rebasing indica si hay un rebase en curso en dir.

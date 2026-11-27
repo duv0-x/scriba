@@ -2,6 +2,7 @@ package gitvault
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -20,6 +21,10 @@ type Pusher struct {
 	// haga commits en dir para que dos git no choquen en .git/index.lock.
 	// Fíjalo antes del primer Trigger.
 	Lock sync.Locker
+	// BeforePull, si no es nil, corre con Lock tomado justo antes del pull: así los
+	// commits web diferidos se hacen antes y el autostash no choca con ellos (ADR-014).
+	// Fíjalo antes del primer Trigger.
+	BeforePull func() error
 
 	mu     sync.Mutex
 	timer  *time.Timer
@@ -62,6 +67,11 @@ func (p *Pusher) run() {
 	}
 	if p.Lock != nil {
 		p.Lock.Lock()
+	}
+	if p.BeforePull != nil {
+		if err := p.BeforePull(); err != nil {
+			slog.Warn("gitvault: antes del pull", "err", err) // el autostash cubre lo que quede sin commit
+		}
 	}
 	err := Pull(ctx, p.dir, cred)
 	if err == nil {

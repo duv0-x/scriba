@@ -31,8 +31,9 @@ func NewPublisher(bus *Bus, pres *Presence, window time.Duration, now func() tim
 	return &Publisher{bus: bus, pres: pres, window: window, now: now, agentAt: map[string]time.Time{}, held: map[string]*hold{}}
 }
 
-// Agent publica el cambio de un agente (siempre) y descarta el aviso de disco retenido de la misma ruta.
-func (p *Publisher) Agent(path, agent string) {
+// Agent publica el cambio de un agente (siempre) y descarta el aviso de disco retenido de la misma
+// ruta. hash es el SHA-256 hex del contenido escrito; los eventos de disco y de release van sin hash.
+func (p *Publisher) Agent(path, agent, hash string) {
 	now := p.now()
 	p.mu.Lock()
 	if h := p.held[path]; h != nil {
@@ -46,7 +47,7 @@ func (p *Publisher) Agent(path, agent string) {
 		}
 	}
 	p.mu.Unlock()
-	e := Event{Kind: Changed, Path: path, Agent: agent, At: now}
+	e := Event{Kind: Changed, Path: path, Agent: agent, At: now, Hash: hash}
 	if p.pres != nil {
 		p.pres.Observe(e)
 	}

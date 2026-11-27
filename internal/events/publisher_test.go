@@ -33,11 +33,14 @@ func collect(ch <-chan Event) []Event {
 
 func TestPublisherAgenteLuegoDisco(t *testing.T) {
 	p, ch, pres := newPub(t)
-	p.Agent("a.md", "claude")
+	p.Agent("a.md", "claude", "h1")
 	p.Disk("a.md", false)
 	got := collect(ch)
 	if len(got) != 1 || got[0].Agent != "claude" || got[0].Kind != Changed {
 		t.Fatalf("eventos = %+v", got)
+	}
+	if got[0].Hash != "h1" {
+		t.Fatalf("hash = %q", got[0].Hash)
 	}
 	if a, ok := pres.Writing("a.md"); !ok || a != "claude" {
 		t.Fatalf("presencia = %q %v", a, ok)
@@ -49,7 +52,7 @@ func TestPublisherDiscoLuegoAgente(t *testing.T) {
 	p.Disk("a.md", false)
 	p.Disk("a.md", false) // el watcher puede avisar dos veces
 	time.Sleep(win / 5)
-	p.Agent("a.md", "claude")
+	p.Agent("a.md", "claude", "h1")
 	got := collect(ch)
 	if len(got) != 1 || got[0].Agent != "claude" {
 		t.Fatalf("eventos = %+v", got)
@@ -94,7 +97,7 @@ func TestPublisherVentanaVencida(t *testing.T) {
 	defer cancel()
 	p := NewPublisher(bus, nil, win, func() time.Time { return now })
 	defer p.Close()
-	p.Agent("a.md", "claude")
+	p.Agent("a.md", "claude", "h1")
 	<-ch
 	now = t0.Add(win) // un cambio en disco tras la ventana es de otra persona
 	p.Disk("a.md", false)
