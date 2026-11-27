@@ -25,7 +25,7 @@ func TestConcesionCaducada(t *testing.T) {
 	if err := st.InsertOAuthToken(g); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.Verify(p.Access); ok {
+	if _, _, ok := s.Verify(p.Access); ok {
 		t.Error("un access token caducado sigue valiendo")
 	}
 	if _, err := s.Refresh(p.Refresh, "c"); !errors.Is(err, ErrInvalidGrant) {
@@ -35,7 +35,7 @@ func TestConcesionCaducada(t *testing.T) {
 		t.Errorf("lista: %+v", l)
 	}
 	// El nombre de una concesión caducada se puede reutilizar en un token estático.
-	if _, err := s.Create("claude"); err != nil {
+	if _, err := s.Create("claude", ""); err != nil {
 		t.Errorf("reutilizar nombre: %v", err)
 	}
 }

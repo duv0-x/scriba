@@ -1,5 +1,5 @@
-// Package mcp expone el vault a los agentes de IA como servidor MCP (streamable HTTP)
-// detrás de un token Bearer por agente (ADR-004).
+// Package mcp expone las KBs a los agentes de IA como servidor MCP (streamable HTTP)
+// detrás de un token Bearer por agente (ADR-004). Cada token opera solo sobre su KB (ADR-013).
 package mcp
 
 import (
@@ -19,7 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/oauth"
 	"github.com/duv0-x/scriba/internal/vault"
 	"github.com/duv0-x/scriba/internal/writer"
@@ -27,11 +27,12 @@ import (
 
 // Config son las dependencias del servidor MCP.
 type Config struct {
-	V      *vault.Vault
-	Ix     *index.Index
-	W      *writer.Writer
+	// KBs resuelve la KB de cada token; una KB que no existe (p. ej. borrada) responde 401.
+	KBs interface {
+		Get(slug string) (*kbs.KB, bool)
+	}
 	Agents interface {
-		Verify(token string) (string, bool)
+		Verify(token string) (name, kb string, ok bool)
 	}
 	PublicURL string           // base para kb_open y las URLs devueltas
 	Now       func() time.Time // nil = time.Now
@@ -43,10 +44,19 @@ Las notas se organizan por tipo en carpetas (journal/, tickets/, plans/, decisio
 Antes de escribir, busca con kb_search (y lee con kb_read) para no duplicar ni contradecir notas existentes.
 Cada escritura queda como un commit a tu nombre; para el registro del día usa kb_log_journal.`
 
-type agentKey struct{}
+type authKey struct{}
 
-// baseKey es la clave de TokenInfo.Extra con la base de las URLs de la petición.
-const baseKey = "base"
+// authed es lo que el handler resolvió del token.
+type authed struct {
+	name string
+	kb   *kbs.KB
+}
+
+// Claves de TokenInfo.Extra: la base de las URLs de la petición y la KB del token.
+const (
+	baseKey = "base"
+	kbKey   = "kb"
+)
 
 // baseURL es la base de las URLs devueltas: PublicURL o, si falta, la deducida de la petición.
 func (cfg Config) baseURL(r *http.Request) string { return oauth.BaseURL(cfg.PublicURL, r) }
@@ -65,18 +75,22 @@ func Handler(cfg Config) http.Handler {
 	// El middleware del SDK mete el agente en TokenInfo.UserID: llega a cada tool en
 	// req.Extra.TokenInfo y además ata cada sesión MCP al agente que la abrió.
 	withInfo := auth.RequireBearerToken(func(ctx context.Context, _ string, r *http.Request) (*auth.TokenInfo, error) {
-		name, _ := ctx.Value(agentKey{}).(string)
-		// La base viaja en TokenInfo porque es lo único por petición que llega a las tools
+		a, _ := ctx.Value(authKey{}).(authed)
+		// La base y la KB viajan en TokenInfo porque es lo único por petición que llega a las tools
 		// (su ctx es el de la sesión, no el de la petición HTTP).
-		return &auth.TokenInfo{UserID: name, Extra: map[string]any{baseKey: cfg.baseURL(r)}}, nil
+		return &auth.TokenInfo{UserID: a.name, Extra: map[string]any{baseKey: cfg.baseURL(r), kbKey: a.kb}}, nil
 	}, &auth.RequireBearerTokenOptions{AllowMissingExpiration: true})(h)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
-		name, ok := "", false
+		var a authed
+		ok := false
 		presented := strings.EqualFold(scheme, "Bearer") && token != ""
 		if presented {
-			name, ok = cfg.Agents.Verify(strings.TrimSpace(token))
+			var slug string
+			if a.name, slug, ok = cfg.Agents.Verify(strings.TrimSpace(token)); ok {
+				a.kb, ok = cfg.KBs.Get(slug)
+			}
 		}
 		if !ok {
 			// RFC 9728: el 401 dice dónde descubrir el authorization server (ADR-010).
@@ -90,7 +104,7 @@ func Handler(cfg Config) http.Handler {
 			w.Write([]byte(`{"error":"token inválido"}`))
 			return
 		}
-		withInfo.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), agentKey{}, name)))
+		withInfo.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), authKey{}, a)))
 	})
 }
 
@@ -100,6 +114,16 @@ func agentOf(req *sdk.CallToolRequest) (string, error) {
 		return "", errors.New("petición sin agente autenticado")
 	}
 	return req.Extra.TokenInfo.UserID, nil
+}
+
+// kbOf saca la KB que el handler resolvió para el token de la petición.
+func kbOf(req *sdk.CallToolRequest) (*kbs.KB, error) {
+	if req.Extra != nil && req.Extra.TokenInfo != nil {
+		if k, ok := req.Extra.TokenInfo.Extra[kbKey].(*kbs.KB); ok && k != nil {
+			return k, nil
+		}
+	}
+	return nil, errors.New("petición sin KB resuelta")
 }
 
 // Entradas y salidas de las tools (el SDK infiere el jsonschema; sin omitempty = obligatorio).
@@ -186,11 +210,15 @@ func newServer(cfg Config) *sdk.Server {
 	lim.Minimum, lim.Maximum, lim.Default = new(1.0), new(50.0), json.RawMessage("10")
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_search", InputSchema: searchSchema,
 		Description: "Búsqueda de texto completo en la base de conocimiento. Devuelve las notas más relevantes con su ruta, título y un fragmento. Úsala antes de escribir para no duplicar notas."},
-		func(_ context.Context, _ *sdk.CallToolRequest, in searchIn) (*sdk.CallToolResult, searchOut, error) {
+		func(_ context.Context, req *sdk.CallToolRequest, in searchIn) (*sdk.CallToolResult, searchOut, error) {
+			k, err := kbOf(req)
+			if err != nil {
+				return nil, searchOut{}, err
+			}
 			if in.Limit == 0 {
 				in.Limit = 10
 			}
-			hits, err := cfg.Ix.Search(in.Query, in.Limit)
+			hits, err := k.Ix.Search(in.Query, in.Limit)
 			if err != nil {
 				return nil, searchOut{}, err
 			}
@@ -203,15 +231,19 @@ func newServer(cfg Config) *sdk.Server {
 
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_read",
 		Description: "Lee una nota completa (frontmatter incluido) con sus metadatos (título, tipo, fecha, tags) y las rutas de las notas que la enlazan. También lee las plantillas de solo lectura: _templates/ticket.md, adr.md, runbook.md y postmortem.md."},
-		func(_ context.Context, _ *sdk.CallToolRequest, in pathIn) (*sdk.CallToolResult, readOut, error) {
+		func(_ context.Context, req *sdk.CallToolRequest, in pathIn) (*sdk.CallToolResult, readOut, error) {
+			k, err := kbOf(req)
+			if err != nil {
+				return nil, readOut{}, err
+			}
 			if name, ok := strings.CutPrefix(in.Path, "_templates/"); ok {
-				c, err := cfg.V.Template(name)
+				c, err := k.V.Template(name)
 				if err != nil {
 					return nil, readOut{}, humanErr(in.Path, err)
 				}
 				return nil, readOut{Path: in.Path, Content: c, Tags: []string{}, Backlinks: []string{}}, nil
 			}
-			abs, err := cfg.noteAbs(in.Path)
+			abs, err := noteAbs(k.V, in.Path)
 			if err != nil {
 				return nil, readOut{}, err
 			}
@@ -219,11 +251,11 @@ func newServer(cfg Config) *sdk.Server {
 			if err != nil {
 				return nil, readOut{}, humanErr(in.Path, err)
 			}
-			n, err := cfg.V.Read(in.Path)
+			n, err := k.V.Read(in.Path)
 			if err != nil {
 				return nil, readOut{}, humanErr(in.Path, err)
 			}
-			bl, err := cfg.Ix.Backlinks(n.Path)
+			bl, err := k.Ix.Backlinks(n.Path)
 			if err != nil {
 				return nil, readOut{}, err
 			}
@@ -240,8 +272,12 @@ func newServer(cfg Config) *sdk.Server {
 
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_list",
 		Description: "Lista las notas (ruta, título, tipo, fecha) de una carpeta y sus subcarpetas, ordenadas por ruta; sin carpeta lista todo el vault. Máximo 500."},
-		func(_ context.Context, _ *sdk.CallToolRequest, in listIn) (*sdk.CallToolResult, listOut, error) {
-			refs, err := cfg.Ix.Refs()
+		func(_ context.Context, req *sdk.CallToolRequest, in listIn) (*sdk.CallToolResult, listOut, error) {
+			k, err := kbOf(req)
+			if err != nil {
+				return nil, listOut{}, err
+			}
+			refs, err := k.Ix.Refs()
 			if err != nil {
 				return nil, listOut{}, err
 			}
@@ -265,8 +301,12 @@ func newServer(cfg Config) *sdk.Server {
 
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_backlinks",
 		Description: "Devuelve las notas (ruta y título) que enlazan con [[wikilink]] a la nota indicada."},
-		func(_ context.Context, _ *sdk.CallToolRequest, in pathIn) (*sdk.CallToolResult, backlinksOut, error) {
-			bl, err := cfg.Ix.Backlinks(in.Path)
+		func(_ context.Context, req *sdk.CallToolRequest, in pathIn) (*sdk.CallToolResult, backlinksOut, error) {
+			k, err := kbOf(req)
+			if err != nil {
+				return nil, backlinksOut{}, err
+			}
+			bl, err := k.Ix.Backlinks(in.Path)
 			if err != nil {
 				return nil, backlinksOut{}, err
 			}
@@ -284,8 +324,12 @@ func newServer(cfg Config) *sdk.Server {
 			if err != nil {
 				return nil, writeOut{}, err
 			}
-			res, err := cfg.W.Write(agent, in.Path, in.Content, in.Message)
-			return writeResult(req, in.Path, res, err)
+			k, err := kbOf(req)
+			if err != nil {
+				return nil, writeOut{}, err
+			}
+			res, err := k.W.Write(agent, in.Path, in.Content, in.Message)
+			return writeResult(req, k.Slug, in.Path, res, err)
 		})
 
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_append",
@@ -295,8 +339,12 @@ func newServer(cfg Config) *sdk.Server {
 			if err != nil {
 				return nil, writeOut{}, err
 			}
-			res, err := cfg.W.Append(agent, in.Path, in.Content)
-			return writeResult(req, in.Path, res, err)
+			k, err := kbOf(req)
+			if err != nil {
+				return nil, writeOut{}, err
+			}
+			res, err := k.W.Append(agent, in.Path, in.Content)
+			return writeResult(req, k.Slug, in.Path, res, err)
 		})
 
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_log_journal",
@@ -306,27 +354,35 @@ func newServer(cfg Config) *sdk.Server {
 			if err != nil {
 				return nil, writeOut{}, err
 			}
-			res, err := cfg.W.LogJournal(agent, in.Title, in.Body, cfg.Now())
-			return writeResult(req, res.Path, res, err)
+			k, err := kbOf(req)
+			if err != nil {
+				return nil, writeOut{}, err
+			}
+			res, err := k.W.LogJournal(agent, in.Title, in.Body, cfg.Now())
+			return writeResult(req, k.Slug, res.Path, res, err)
 		})
 
 	sdk.AddTool(s, &sdk.Tool{Name: "kb_open",
 		Description: "Devuelve la URL del lector web de Scriba para una nota existente, para que la persona la abra en su navegador."},
 		func(_ context.Context, req *sdk.CallToolRequest, in pathIn) (*sdk.CallToolResult, openOut, error) {
-			if _, err := cfg.noteAbs(in.Path); err != nil {
+			k, err := kbOf(req)
+			if err != nil {
 				return nil, openOut{}, err
 			}
-			return nil, openOut{URL: noteURL(req, in.Path)}, nil
+			if _, err := noteAbs(k.V, in.Path); err != nil {
+				return nil, openOut{}, err
+			}
+			return nil, openOut{URL: noteURL(req, k.Slug, in.Path)}, nil
 		})
 	return s
 }
 
 // noteAbs valida que path sea una nota .md existente dentro del vault y devuelve su ruta absoluta.
-func (cfg Config) noteAbs(p string) (string, error) {
+func noteAbs(v *vault.Vault, p string) (string, error) {
 	if !strings.HasSuffix(p, ".md") {
 		return "", fmt.Errorf("la ruta %q no es una nota: debe terminar en .md", p)
 	}
-	abs, err := cfg.V.Abs(p)
+	abs, err := v.Abs(p)
 	if err != nil {
 		return "", humanErr(p, err)
 	}
@@ -340,8 +396,8 @@ func (cfg Config) noteAbs(p string) (string, error) {
 	return abs, nil
 }
 
-// noteURL arma la URL del lector con la base que Handler dejó en la petición.
-func noteURL(req *sdk.CallToolRequest, p string) string {
+// noteURL arma la URL canónica del lector (<base>/k/{kb}/n/<path>) con la base que Handler dejó en la petición.
+func noteURL(req *sdk.CallToolRequest, kb, p string) string {
 	segs := strings.Split(p, "/")
 	for i, s := range segs {
 		segs[i] = url.PathEscape(s)
@@ -350,14 +406,14 @@ func noteURL(req *sdk.CallToolRequest, p string) string {
 	if req.Extra != nil && req.Extra.TokenInfo != nil {
 		base, _ = req.Extra.TokenInfo.Extra[baseKey].(string)
 	}
-	return base + "/n/" + strings.Join(segs, "/")
+	return base + "/k/" + url.PathEscape(kb) + "/n/" + strings.Join(segs, "/")
 }
 
-func writeResult(req *sdk.CallToolRequest, p string, res writer.Result, err error) (*sdk.CallToolResult, writeOut, error) {
+func writeResult(req *sdk.CallToolRequest, kb, p string, res writer.Result, err error) (*sdk.CallToolResult, writeOut, error) {
 	if err != nil {
 		return nil, writeOut{}, humanErr(p, err)
 	}
-	return nil, writeOut{Path: res.Path, URL: noteURL(req, res.Path), Commit: res.Commit, Created: res.Created}, nil
+	return nil, writeOut{Path: res.Path, URL: noteURL(req, kb, res.Path), Commit: res.Commit, Created: res.Created}, nil
 }
 
 // humanErr traduce los errores de validación a un mensaje en español para el agente;

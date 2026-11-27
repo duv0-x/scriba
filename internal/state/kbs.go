@@ -41,8 +41,8 @@ func (s *Store) AdoptKB(kb string) error {
 	return tx.Commit()
 }
 
-// ForgetKB borra lo que state guarda de la KB kb (lecturas, actividad y repo del conector) al borrarla.
-// Los tokens de agente de esa KB los revoca el issue 3, no esta función.
+// ForgetKB borra lo que state guarda de la KB kb (lecturas, actividad y repo del conector) al borrarla
+// y revoca sus tokens de agente y concesiones OAuth.
 func (s *Store) ForgetKB(kb string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -53,6 +53,7 @@ func (s *Store) ForgetKB(kb string) error {
 		"DELETE FROM reads WHERE kb = ?",
 		"DELETE FROM activity WHERE kb = ?",
 		"DELETE FROM kb_connectors WHERE kb = ?",
+		"UPDATE agent_tokens SET revoked = 1 WHERE kb = ?",
 	} {
 		if _, err := tx.Exec(query, kb); err != nil {
 			return err

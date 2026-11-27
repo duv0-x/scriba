@@ -5,7 +5,7 @@ templ consentPage(v consentView) {
 	<div class="setup">
 		<div>
 			<h1>Autorizar conector</h1>
-			<p class="sub">Un cliente pide leer y escribir tu base de conocimiento por MCP.</p>
+			<p class="sub">Un cliente pide leer y escribir una de tus bases de conocimiento por MCP.</p>
 		</div>
 		if v.Msg != "" {
 			<p class="alert" role="alert">{ v.Msg }</p>
@@ -15,7 +15,7 @@ templ consentPage(v consentView) {
 				<div class="conn-head">
 					<h2>{ v.Req.ClientName }</h2>
 				</div>
-				<p class="desc">Podrá leer y escribir <b>todas</b> las notas, y volverás a <code>{ v.Host }</code>. El nombre lo declara el propio cliente: aprueba solo si acabas de iniciar la conexión.</p>
+				<p class="desc">Podrá leer y escribir <b>todas</b> las notas de la base que elijas, y solo esa, y volverás a <code>{ v.Host }</code>. El nombre lo declara el propio cliente: aprueba solo si acabas de iniciar la conexión.</p>
 				<form hx-boost="false" method="post" action="/oauth/authorize" class="row">
 					<input type="hidden" name="response_type" value="code"/>
 					<input type="hidden" name="code_challenge_method" value="S256"/>
@@ -25,6 +25,7 @@ templ consentPage(v consentView) {
 					<input type="hidden" name="code_challenge" value={ v.Req.Challenge }/>
 					<input type="hidden" name="resource" value={ v.Req.Resource }/>
 					<input type="text" name="agent" value={ v.Agent } required pattern="[a-z0-9][a-z0-9\-]{0,39}" maxlength="40" autocomplete="off" aria-label="Nombre del agente"/>
+					@kbSelect(v.KBs, v.KB)
 					<button class="btn primary" type="submit" name="decision" value="approve">Aprobar</button>
 					<button class="btn" type="submit" name="decision" value="deny" formnovalidate>Rechazar</button>
 				</form>

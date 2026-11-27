@@ -82,14 +82,19 @@ func params(id string) url.Values {
 		"state": {"xyz"}, "code_challenge": {challenge()}, "code_challenge_method": {"S256"}, "resource": {base + "/mcp"}}
 }
 
-// code recorre el consentimiento aprobado y devuelve el authorization code.
+// code recorre el consentimiento aprobado (KB por defecto) y devuelve el authorization code.
 func (e *env) code(t *testing.T, id, agent string) string {
+	t.Helper()
+	return e.codeKB(t, id, agent, "")
+}
+
+func (e *env) codeKB(t *testing.T, id, agent, kb string) string {
 	t.Helper()
 	req, redirect, err := e.s.Parse(params(id), base)
 	if err != nil || redirect != "" {
 		t.Fatalf("parse: %q %v", redirect, err)
 	}
-	u, _ := url.Parse(e.s.Approve(req, agent))
+	u, _ := url.Parse(e.s.Approve(req, agent, kb))
 	if u.Query().Get("state") != "xyz" {
 		t.Fatalf("state: %s", u)
 	}
@@ -191,7 +196,7 @@ func TestFlujoPKCEYRotacion(t *testing.T) {
 	if status != 200 || first["token_type"] != "Bearer" || first["expires_in"] != float64(3600) {
 		t.Fatalf("token: %d %v", status, first)
 	}
-	if name, ok := e.ag.Verify(first["access_token"].(string)); !ok || name != "claude" {
+	if name, _, ok := e.ag.Verify(first["access_token"].(string)); !ok || name != "claude" {
 		t.Fatalf("verify: %q %v", name, ok)
 	}
 
@@ -201,20 +206,34 @@ func TestFlujoPKCEYRotacion(t *testing.T) {
 	if status != 200 || second["refresh_token"] == first["refresh_token"] {
 		t.Fatalf("refresh: %d %v", status, second)
 	}
-	if _, ok := e.ag.Verify(first["access_token"].(string)); ok {
+	if _, _, ok := e.ag.Verify(first["access_token"].(string)); ok {
 		t.Error("el access anterior sigue valiendo")
 	}
-	if _, ok := e.ag.Verify(second["access_token"].(string)); !ok {
+	if _, _, ok := e.ag.Verify(second["access_token"].(string)); !ok {
 		t.Error("el access nuevo no vale")
 	}
 
 	status, out = e.refresh(t, id, first["refresh_token"].(string))
 	wantError(t, "reutilización", status, out, "invalid_grant")
-	if _, ok := e.ag.Verify(second["access_token"].(string)); ok {
+	if _, _, ok := e.ag.Verify(second["access_token"].(string)); ok {
 		t.Error("la reutilización no revocó la concesión")
 	}
 	status, out = e.refresh(t, id, second["refresh_token"].(string))
 	wantError(t, "tras revocar", status, out, "invalid_grant")
+}
+
+// La KB elegida en el consentimiento viaja en el code y sobrevive a la rotación del refresh.
+func TestFlujoConKB(t *testing.T) {
+	e := setup(t)
+	id := e.clientID(t)
+	_, first := e.exchange(t, id, e.codeKB(t, id, "claude", "b"), verifier)
+	if name, kb, ok := e.ag.Verify(first["access_token"].(string)); !ok || name != "claude" || kb != "b" {
+		t.Fatalf("verify: %q %q %v", name, kb, ok)
+	}
+	_, second := e.refresh(t, id, first["refresh_token"].(string))
+	if _, kb, ok := e.ag.Verify(second["access_token"].(string)); !ok || kb != "b" {
+		t.Fatalf("verify tras refresh: %q %v", kb, ok)
+	}
 }
 
 func TestRevocacionYReconexion(t *testing.T) {
@@ -222,13 +241,13 @@ func TestRevocacionYReconexion(t *testing.T) {
 	id := e.clientID(t)
 	_, first := e.exchange(t, id, e.code(t, id, "claude"), verifier)
 	_, second := e.exchange(t, id, e.code(t, id, "claude"), verifier) // reconectar reemplaza
-	if _, ok := e.ag.Verify(first["access_token"].(string)); ok {
+	if _, _, ok := e.ag.Verify(first["access_token"].(string)); ok {
 		t.Error("la concesión reemplazada sigue valiendo")
 	}
 	if ok, err := e.ag.Revoke("claude"); !ok || err != nil {
 		t.Fatalf("revocar: %v %v", ok, err)
 	}
-	if _, ok := e.ag.Verify(second["access_token"].(string)); ok {
+	if _, _, ok := e.ag.Verify(second["access_token"].(string)); ok {
 		t.Error("revocado y sigue valiendo")
 	}
 	status, out := e.refresh(t, id, second["refresh_token"].(string))
@@ -237,14 +256,14 @@ func TestRevocacionYReconexion(t *testing.T) {
 
 func TestNoPisaTokenEstatico(t *testing.T) {
 	e := setup(t)
-	static, err := e.ag.Create("claude")
+	static, err := e.ag.Create("claude", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := e.clientID(t)
 	status, out := e.exchange(t, id, e.code(t, id, "claude"), verifier)
 	wantError(t, "nombre estático", status, out, "invalid_grant")
-	if _, ok := e.ag.Verify(static); !ok {
+	if _, _, ok := e.ag.Verify(static); !ok {
 		t.Error("el token estático dejó de valer")
 	}
 }

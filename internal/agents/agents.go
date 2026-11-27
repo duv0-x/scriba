@@ -55,8 +55,8 @@ func ValidName(name string) bool { return nameRe.MatchString(name) }
 // Store opera los tokens sobre state.db.
 type Store struct{ S *state.Store }
 
-// Create genera y guarda un token para name; devuelve el valor en claro.
-func (s Store) Create(name string) (string, error) {
+// Create genera y guarda un token para name ligado a la KB kb ("" = la por defecto); devuelve el valor en claro.
+func (s Store) Create(name, kb string) (string, error) {
 	if !ValidName(name) {
 		return "", ErrInvalidName
 	}
@@ -64,28 +64,28 @@ func (s Store) Create(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := s.S.InsertAgentToken(name, Hash(tok), time.Now()); err != nil {
+	if err := s.S.InsertAgentToken(name, kb, Hash(tok), time.Now()); err != nil {
 		return "", err
 	}
 	return tok, nil
 }
 
-// Verify devuelve el nombre del agente si token es válido y no está revocado.
-func (s Store) Verify(token string) (string, bool) {
+// Verify devuelve el nombre del agente y el slug de su KB si token es válido y no está revocado.
+func (s Store) Verify(token string) (name, kb string, ok bool) {
 	if len(token) != len(Prefix)+bodyLen || token[:len(Prefix)] != Prefix {
-		return "", false
+		return "", "", false
 	}
 	h := Hash(token)
 	a, ok, err := s.S.AgentByHash(h)
 	if err != nil || !ok || subtle.ConstantTimeCompare(a.Hash, h) != 1 || a.Revoked ||
 		(!a.Expires.IsZero() && !time.Now().Before(a.Expires)) {
-		return "", false
+		return "", "", false
 	}
 	// last_used con resolución de un minuto: evita una escritura por petición.
 	if now := time.Now(); now.Sub(a.LastUsed) >= time.Minute {
 		_ = s.S.TouchAgentToken(a.ID, now) // si falla, la autenticación sigue siendo válida
 	}
-	return a.Name, true
+	return a.Name, a.KB, true
 }
 
 func (s Store) List() ([]state.AgentToken, error) { return s.S.ListAgentTokens() }

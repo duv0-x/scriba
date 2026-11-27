@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/duv0-x/scriba/internal/agents"
+	"github.com/duv0-x/scriba/internal/kbs"
 )
 
 // newAgentsServer es newSetupServer con agentes y la base ya inicializada (si no, gate manda a /bienvenida).
@@ -64,7 +65,7 @@ func TestAgentes(t *testing.T) {
 	if _, body := get(t, e.h, "/agentes", nil); !strings.Contains(body, "revocado") || strings.Contains(body, "Revocar</button>") {
 		t.Errorf("tras revocar:\n%s", body)
 	}
-	if _, ok := e.srv.Agents.Verify(tok); ok {
+	if _, _, ok := e.srv.Agents.Verify(tok); ok {
 		t.Error("el token revocado sigue siendo válido")
 	}
 }
@@ -108,5 +109,30 @@ func TestUltimoPush(t *testing.T) {
 	}
 	if _, body := get(t, e.h, "/conectores", nil); !strings.Contains(body, "2026-11-16 10:00") || !strings.Contains(body, `class="bad">rechazado por el remoto`) {
 		t.Errorf("con push y error:\n%s", body)
+	}
+}
+
+// Al crear un token se elige la KB; la lista la muestra y una KB inexistente es 400.
+func TestAgentesPorKB(t *testing.T) {
+	e := newAgentsServer(t)
+	reg := e.srv.KBs.(*fakeKBs)
+	reg.list = append(reg.list, &kbs.KB{Slug: "trabajo", V: e.kb.V, Ix: e.kb.Ix})
+
+	if _, body := get(t, e.h, "/agentes", nil); !strings.Contains(body, `<option value="trabajo">`) || !strings.Contains(body, `<option value="principal" selected>`) {
+		t.Fatalf("selector de KB:\n%s", body)
+	}
+	res, body := post(t, e.h, "/agentes", url.Values{"name": {"codex"}, "kb": {"trabajo"}}, nil)
+	tok := tokenRe.FindString(body)
+	if res.StatusCode != http.StatusOK || tok == "" {
+		t.Fatalf("crear: %d\n%s", res.StatusCode, body)
+	}
+	if _, kb, ok := e.srv.Agents.Verify(tok); !ok || kb != "trabajo" {
+		t.Fatalf("KB del token = %q %v", kb, ok)
+	}
+	if _, body := get(t, e.h, "/agentes", nil); !strings.Contains(body, "<td><code>trabajo</code></td>") {
+		t.Errorf("la lista no muestra la KB:\n%s", body)
+	}
+	if res, body := post(t, e.h, "/agentes", url.Values{"name": {"otro"}, "kb": {"nope"}}, nil); res.StatusCode != http.StatusBadRequest || tokenRe.MatchString(body) {
+		t.Errorf("KB inexistente: %d", res.StatusCode)
 	}
 }

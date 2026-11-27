@@ -5,7 +5,7 @@ templ agentsPage(v agentsView) {
 	<div class="setup">
 		<div>
 			<h1>Agentes</h1>
-			<p class="sub">Cada agente usa su propio token para leer y escribir por MCP. El token solo se muestra al crearlo.</p>
+			<p class="sub">Cada agente usa su propio token para leer y escribir una sola base por MCP. El token solo se muestra al crearlo.</p>
 		</div>
 		if v.Msg != "" {
 			<p class="alert" role="alert">{ v.Msg }</p>
@@ -13,7 +13,7 @@ templ agentsPage(v agentsView) {
 		if v.Token != "" {
 			<section class="conn hl">
 				<div class="conn-head">
-					<h2>Token de <code>{ v.Created }</code></h2>
+					<h2>Token de <code>{ v.Created }</code> en <code>{ v.KB }</code></h2>
 				</div>
 				<div class="row">
 					<code class="secret">{ v.Token }</code>
@@ -34,12 +34,13 @@ templ agentsPage(v agentsView) {
 			} else {
 				<table class="tokens">
 					<thead>
-						<tr><th>Nombre</th><th>Creado</th><th>Último uso</th><th>Estado</th><td></td></tr>
+						<tr><th>Nombre</th><th>Base</th><th>Creado</th><th>Último uso</th><th>Estado</th><td></td></tr>
 					</thead>
 					<tbody>
 						for _, t := range v.Tokens {
 							<tr>
 								<td><code>{ t.Name }</code></td>
+								<td><code>{ t.KB }</code></td>
 								<td>{ t.Created.Format("2006-01-02") }</td>
 								<td>{ ago(t.LastUsed) }</td>
 								<td>
@@ -71,10 +72,20 @@ templ agentsPage(v agentsView) {
 			<h2>Nuevo agente</h2>
 			<form hx-boost="false" method="post" action="/agentes" class="row">
 				<input type="text" name="name" required placeholder="claude-code-mac" pattern="[a-z0-9][a-z0-9\-]{0,39}" maxlength="40" autocomplete="off" aria-label="Nombre del agente"/>
+				@kbSelect(v.KBs, v.KB)
 				<button class="btn primary" type="submit">Crear token</button>
 			</form>
 		</section>
 	</div>
+}
+
+// kbSelect elige la base a la que queda ligado un token o un conector.
+templ kbSelect(list []string, selected string) {
+	<select name="kb" required aria-label="Base de conocimiento">
+		for _, kb := range list {
+			<option value={ kb } selected?={ kb == selected }>{ kb }</option>
+		}
+	</select>
 }
 
 templ copyButton(text string) {

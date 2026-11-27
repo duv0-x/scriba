@@ -297,6 +297,10 @@ func (r *Registry) Create(slug string, fill func(vaultDir string) error) (*KB, e
 			os.RemoveAll(dir)
 		}
 	}()
+	// Un slug reutilizado no hereda nada de la KB borrada: ni un token emitido en carrera con el borrado.
+	if err := r.cfg.State.ForgetKB(slug); err != nil {
+		return nil, err
+	}
 	vaultDir := filepath.Join(dir, "vault")
 	if fill == nil {
 		fill = onboarding.Scaffold

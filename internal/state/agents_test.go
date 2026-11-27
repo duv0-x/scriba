@@ -10,10 +10,10 @@ import (
 func TestAgentTokens(t *testing.T) {
 	s := open(t, filepath.Join(t.TempDir(), "state.db"))
 	t0 := time.Unix(1700000000, 0)
-	if err := s.InsertAgentToken("claude", []byte("h1"), t0); err != nil {
+	if err := s.InsertAgentToken("claude", "", []byte("h1"), t0); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.InsertAgentToken("claude", []byte("h2"), t0); !errors.Is(err, ErrNameTaken) {
+	if err := s.InsertAgentToken("claude", "", []byte("h2"), t0); !errors.Is(err, ErrNameTaken) {
 		t.Fatalf("nombre activo repetido: err=%v", err)
 	}
 	a, ok, err := s.AgentByHash([]byte("h1"))
@@ -34,13 +34,13 @@ func TestAgentTokens(t *testing.T) {
 		t.Fatalf("revoke repetido: %v %v", ok, err)
 	}
 	// Nombre revocado: se reutiliza y el token viejo desaparece.
-	if err := s.InsertAgentToken("claude", []byte("h2"), t0.Add(2*time.Hour)); err != nil {
+	if err := s.InsertAgentToken("claude", "", []byte("h2"), t0.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, _ := s.AgentByHash([]byte("h1")); ok {
 		t.Fatal("el token revocado sigue en la base")
 	}
-	if err := s.InsertAgentToken("codex", []byte("h3"), t0.Add(3*time.Hour)); err != nil {
+	if err := s.InsertAgentToken("codex", "", []byte("h3"), t0.Add(3*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	l, err := s.ListAgentTokens()

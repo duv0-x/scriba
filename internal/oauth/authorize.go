@@ -20,8 +20,8 @@ type AuthRequest struct {
 
 // grant es lo que representa un authorization code.
 type grant struct {
-	clientID, redirectURI, challenge, agent string
-	expires                                 time.Time
+	clientID, redirectURI, challenge, agent, kb string
+	expires                                     time.Time
 }
 
 // Parse valida los parámetros de /oauth/authorize. Con err no se puede redirigir (el cliente
@@ -52,8 +52,8 @@ func (s *Server) Parse(v url.Values, base string) (req AuthRequest, redirect str
 	return req, redirectWith(uri, "error", code, req.State), nil
 }
 
-// Approve emite un code de un solo uso para el agente y devuelve a dónde redirigir.
-func (s *Server) Approve(req AuthRequest, agent string) string {
+// Approve emite un code de un solo uso para el agente, ligado a la KB kb, y devuelve a dónde redirigir.
+func (s *Server) Approve(req AuthRequest, agent, kb string) string {
 	code, now := rand.Text(), s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -62,7 +62,7 @@ func (s *Server) Approve(req AuthRequest, agent string) string {
 			delete(s.codes, k)
 		}
 	}
-	s.codes[code] = grant{req.ClientID, req.RedirectURI, req.Challenge, agent, now.Add(codeTTL)}
+	s.codes[code] = grant{req.ClientID, req.RedirectURI, req.Challenge, agent, kb, now.Add(codeTTL)}
 	return redirectWith(req.RedirectURI, "code", code, req.State)
 }
 

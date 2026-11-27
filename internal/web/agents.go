@@ -18,6 +18,8 @@ type agentsView struct {
 	Created string // nombre del agente recién creado
 	Token   string
 	Command string // claude mcp add … listo para copiar
+	KBs     []string
+	KB      string // KB elegida en el formulario (por defecto, la de la petición)
 }
 
 func (s *Server) agentRoutes(mux *http.ServeMux) {
@@ -30,17 +32,22 @@ func (s *Server) agentRoutes(mux *http.ServeMux) {
 
 func (s *Server) agentCreate(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
-	tok, err := s.Agents.Create(name)
+	kb, ok := s.tokenKB(r)
+	if !ok {
+		s.renderAgents(w, r, http.StatusBadRequest, agentsView{Msg: "No existe la base «" + kb + "»."})
+		return
+	}
+	tok, err := s.Agents.Create(name, kb)
 	switch {
 	case errors.Is(err, agents.ErrInvalidName):
-		s.renderAgents(w, r, http.StatusBadRequest, agentsView{Msg: "El nombre solo admite minúsculas, dígitos y guiones (hasta 40 caracteres) y debe empezar por letra o dígito."})
+		s.renderAgents(w, r, http.StatusBadRequest, agentsView{KB: kb, Msg: "El nombre solo admite minúsculas, dígitos y guiones (hasta 40 caracteres) y debe empezar por letra o dígito."})
 	case errors.Is(err, state.ErrNameTaken):
-		s.renderAgents(w, r, http.StatusConflict, agentsView{Msg: "Ya hay un agente activo llamado «" + name + "». Revócalo o elige otro nombre."})
+		s.renderAgents(w, r, http.StatusConflict, agentsView{KB: kb, Msg: "Ya hay un agente activo llamado «" + name + "». Revócalo o elige otro nombre."})
 	case err != nil:
 		serverError(w, err)
 	default:
 		w.Header().Set("Cache-Control", "no-store")
-		s.renderAgents(w, r, http.StatusOK, agentsView{Created: name, Token: tok,
+		s.renderAgents(w, r, http.StatusOK, agentsView{Created: name, Token: tok, KB: kb,
 			Command: `claude mcp add --transport http scriba ` + s.publicURL(r) + `/mcp --header "Authorization: Bearer ` + tok + `"`})
 	}
 }
@@ -60,6 +67,10 @@ func (s *Server) renderAgents(w http.ResponseWriter, r *http.Request, status int
 		return
 	}
 	v.Tokens = toks
+	v.KBs = s.KBs.List()
+	if v.KB == "" {
+		v.KB = s.at(r).Slug
+	}
 	sh, err := s.at(r).shellFor(r, "")
 	if err != nil {
 		serverError(w, err)
@@ -67,6 +78,16 @@ func (s *Server) renderAgents(w http.ResponseWriter, r *http.Request, status int
 	}
 	sh.View = "agentes"
 	page(w, r, status, layout(sh, "Agentes · Scriba", agentsPage(v)))
+}
+
+// tokenKB es la KB del campo kb del formulario ("" = la de la petición) y si existe en el Registry.
+func (s *Server) tokenKB(r *http.Request) (string, bool) {
+	kb := r.PostFormValue("kb")
+	if kb == "" {
+		kb = s.at(r).Slug
+	}
+	_, ok := s.KBs.Get(kb)
+	return kb, ok
 }
 
 // publicURL es la URL base de la instancia: PublicURL o, si falta, el host de la petición.

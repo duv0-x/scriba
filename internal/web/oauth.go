@@ -13,6 +13,8 @@ import (
 type consentView struct {
 	Req              oauth.AuthRequest
 	Host, Agent, Msg string
+	KBs              []string
+	KB               string // KB elegida (por defecto, la de la petición)
 }
 
 func (s *Server) oauthRoutes(mux *http.ServeMux) {
@@ -46,7 +48,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, redirect, http.StatusSeeOther)
 		return
 	}
-	v := consentView{Req: req, Host: redirectHost(req.RedirectURI), Agent: "claude"}
+	v := consentView{Req: req, Host: redirectHost(req.RedirectURI), Agent: "claude", KB: s.at(r).Slug}
 	if r.Method != http.MethodPost {
 		s.renderConsent(w, r, http.StatusOK, v)
 		return
@@ -56,6 +58,14 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v.Agent = strings.TrimSpace(params.Get("agent"))
+	kb, ok := s.tokenKB(r)
+	v.KB = kb
+	if !ok {
+		v.KB = s.at(r).Slug
+		v.Msg = "No existe la base «" + kb + "»."
+		s.renderConsent(w, r, http.StatusBadRequest, v)
+		return
+	}
 	if !agents.ValidName(v.Agent) {
 		v.Msg = "El nombre solo admite minúsculas, dígitos y guiones (hasta 40 caracteres) y debe empezar por letra o dígito."
 		s.renderConsent(w, r, http.StatusBadRequest, v)
@@ -71,7 +81,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		s.renderConsent(w, r, http.StatusConflict, v)
 		return
 	}
-	http.Redirect(w, r, s.OAuth.Approve(req, v.Agent), http.StatusSeeOther)
+	http.Redirect(w, r, s.OAuth.Approve(req, v.Agent, v.KB), http.StatusSeeOther)
 }
 
 func (s *Server) renderConsent(w http.ResponseWriter, r *http.Request, status int, v consentView) {
@@ -81,6 +91,7 @@ func (s *Server) renderConsent(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 	sh.View = "agentes"
+	v.KBs = s.KBs.List()
 	page(w, r, status, layout(sh, "Autorizar conector · Scriba", consentPage(v)))
 }
 

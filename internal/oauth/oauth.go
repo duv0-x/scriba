@@ -42,7 +42,7 @@ var (
 
 // Tokens emite y rota los tokens de un conector (agents.Store).
 type Tokens interface {
-	Grant(agent, clientID string) (agents.Pair, error)
+	Grant(agent, kb, clientID string) (agents.Pair, error)
 	Refresh(refresh, clientID string) (agents.Pair, error)
 }
 
@@ -191,7 +191,7 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 	case "authorization_code":
 		g, ok := s.take(f.Get("code"))
 		if ok && g.clientID == id && g.redirectURI == f.Get("redirect_uri") && verifyPKCE(g.challenge, f.Get("code_verifier")) {
-			pair, err = s.tokens.Grant(g.agent, id)
+			pair, err = s.tokens.Grant(g.agent, g.kb, id)
 		} else {
 			err = agents.ErrInvalidGrant
 		}

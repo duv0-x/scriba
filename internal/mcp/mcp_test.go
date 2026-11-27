@@ -19,32 +19,50 @@ import (
 
 	"github.com/duv0-x/scriba/internal/gitvault"
 	"github.com/duv0-x/scriba/internal/index"
+	"github.com/duv0-x/scriba/internal/kbs"
 	"github.com/duv0-x/scriba/internal/vault"
 	"github.com/duv0-x/scriba/internal/writer"
 )
 
-// fakeAgents acepta tokens fijos y permite revocarlos.
+// fakeAgents acepta tokens fijos (token → [agente, KB]) y permite revocarlos.
 type fakeAgents struct {
 	mu sync.Mutex
-	m  map[string]string
+	m  map[string][2]string
 }
 
-func (f *fakeAgents) Verify(t string) (string, bool) {
+func (f *fakeAgents) Verify(t string) (string, string, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	n, ok := f.m[t]
-	return n, ok
+	a, ok := f.m[t]
+	return a[0], a[1], ok
 }
 
 func (f *fakeAgents) revoke(t string) { f.mu.Lock(); delete(f.m, t); f.mu.Unlock() }
 
-type env struct {
-	srv    *httptest.Server
-	root   string
-	agents *fakeAgents
+// fakeKBs es el Registry: KBs por slug, que se pueden quitar (borrado).
+type fakeKBs struct {
+	mu sync.Mutex
+	m  map[string]*kbs.KB
 }
 
-func setup(t *testing.T, publicURL string) *env {
+func (f *fakeKBs) Get(slug string) (*kbs.KB, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	k, ok := f.m[slug]
+	return k, ok
+}
+
+func (f *fakeKBs) remove(slug string) { f.mu.Lock(); delete(f.m, slug); f.mu.Unlock() }
+
+type env struct {
+	srv    *httptest.Server
+	root   string // vault de la KB "ia-kb" (tok-a, tok-b)
+	rootB  string // vault de la KB "b" (tok-x)
+	agents *fakeAgents
+	kbs    *fakeKBs
+}
+
+func newKB(t *testing.T, slug string) *kbs.KB {
 	t.Helper()
 	root := t.TempDir()
 	if err := gitvault.Init(root); err != nil {
@@ -59,9 +77,16 @@ func setup(t *testing.T, publicURL string) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { ix.Close() })
-	agents := &fakeAgents{m: map[string]string{"tok-a": "claude", "tok-b": "codex"}}
+	return &kbs.KB{Slug: slug, V: v, Ix: ix, W: writer.New(writer.Config{V: v, Ix: ix})}
+}
+
+func setup(t *testing.T, publicURL string) *env {
+	t.Helper()
+	a, b := newKB(t, "ia-kb"), newKB(t, "b")
+	agents := &fakeAgents{m: map[string][2]string{"tok-a": {"claude", "ia-kb"}, "tok-b": {"codex", "ia-kb"}, "tok-x": {"otro", "b"}}}
+	reg := &fakeKBs{m: map[string]*kbs.KB{"ia-kb": a, "b": b}}
 	h := Handler(Config{
-		V: v, Ix: ix, W: writer.New(writer.Config{V: v, Ix: ix}),
+		KBs:       reg,
 		Agents:    agents,
 		PublicURL: publicURL,
 		Now:       func() time.Time { return time.Date(2026, 11, 16, 15, 0, 0, 0, time.UTC) },
@@ -69,7 +94,7 @@ func setup(t *testing.T, publicURL string) *env {
 	})
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	return &env{srv: srv, root: root, agents: agents}
+	return &env{srv: srv, root: a.V.Root, rootB: b.V.Root, agents: agents, kbs: reg}
 }
 
 // bearer añade el token (y opcionalmente Host y cabeceras) a cada petición del cliente MCP.
@@ -190,7 +215,7 @@ func TestTools(t *testing.T) {
 	content := "---\ntitle: Prueba de Scriba\ntype: decisions\n---\n\n# Prueba de Scriba\n\nLa zanahoria es naranja.\n"
 	var w writeOut
 	r := call(t, cs, "kb_write", map[string]any{"path": "decisions/prueba.md", "content": content}, &w)
-	if r.IsError || !w.Created || w.Commit == "" || w.URL != "http://scriba.test/n/decisions/prueba.md" {
+	if r.IsError || !w.Created || w.Commit == "" || w.URL != "http://scriba.test/k/ia-kb/n/decisions/prueba.md" {
 		t.Fatalf("kb_write: %+v %s", w, text(r))
 	}
 	if an := strings.TrimSpace(git(t, e.root, "log", "-1", "--format=%an")); an != "claude via Scriba" {
@@ -224,7 +249,7 @@ func TestTools(t *testing.T) {
 
 	var op openOut
 	call(t, cs, "kb_open", map[string]any{"path": "decisions/prueba.md"}, &op)
-	if op.URL != "http://scriba.test/n/decisions/prueba.md" {
+	if op.URL != "http://scriba.test/k/ia-kb/n/decisions/prueba.md" {
 		t.Fatalf("kb_open: %+v", op)
 	}
 
@@ -310,7 +335,7 @@ func TestURLBase(t *testing.T) {
 			}
 			var op openOut
 			call(t, cs, "kb_open", map[string]any{"path": "a/u.md"}, &op)
-			if want := c.want + "/n/a/u.md"; w.URL != want || op.URL != want {
+			if want := c.want + "/k/ia-kb/n/a/u.md"; w.URL != want || op.URL != want {
 				t.Fatalf("kb_write %q, kb_open %q, quería %q", w.URL, op.URL, want)
 			}
 		})
@@ -386,6 +411,61 @@ func TestRevokedMidSession(t *testing.T) {
 		t.Fatalf("status %d, quería 401", resp.StatusCode)
 	}
 	e.assertNoWrite(t)
+}
+
+// Un token solo ve y escribe su KB: kb_search, kb_list y kb_read no cruzan, y kb_write va a su vault.
+func TestAislamientoEntreKBs(t *testing.T) {
+	e := setup(t, "http://scriba.test/")
+	a, x := e.connect(t, "tok-a"), e.connect(t, "tok-x")
+	note := func(title string) string {
+		return "---\ntitle: " + title + "\ntype: decision\n---\n\npalabraunica " + title + "\n"
+	}
+	var wa, wb writeOut
+	call(t, a, "kb_write", map[string]any{"path": "solo-a.md", "content": note("A")}, &wa)
+	call(t, x, "kb_write", map[string]any{"path": "solo-b.md", "content": note("B")}, &wb)
+	if wa.URL != "http://scriba.test/k/ia-kb/n/solo-a.md" || wb.URL != "http://scriba.test/k/b/n/solo-b.md" {
+		t.Fatalf("URLs: %q %q", wa.URL, wb.URL)
+	}
+	if _, err := os.Stat(filepath.Join(e.root, "solo-a.md")); err != nil {
+		t.Fatalf("kb_write de a no quedó en su vault: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(e.root, "solo-b.md")); !os.IsNotExist(err) {
+		t.Fatalf("kb_write de b quedó en el vault de a: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(e.rootB, "solo-b.md")); err != nil {
+		t.Fatalf("kb_write de b no quedó en su vault: %v", err)
+	}
+	for _, c := range []struct {
+		cs         *sdk.ClientSession
+		own, other string
+	}{{a, "solo-a.md", "solo-b.md"}, {x, "solo-b.md", "solo-a.md"}} {
+		var so searchOut
+		call(t, c.cs, "kb_search", map[string]any{"query": "palabraunica"}, &so)
+		if len(so.Hits) != 1 || so.Hits[0].Path != c.own {
+			t.Fatalf("kb_search: %+v (quería solo %s)", so.Hits, c.own)
+		}
+		var lo listOut
+		call(t, c.cs, "kb_list", nil, &lo)
+		if len(lo.Notes) != 1 || lo.Notes[0].Path != c.own {
+			t.Fatalf("kb_list: %+v (quería solo %s)", lo.Notes, c.own)
+		}
+		if r := call(t, c.cs, "kb_read", map[string]any{"path": c.other}, nil); !r.IsError {
+			t.Fatalf("kb_read leyó %s de la otra KB", c.other)
+		}
+	}
+}
+
+// Al borrar una KB, sus tokens responden 401 aunque tengan una sesión abierta.
+func TestKBBorrada(t *testing.T) {
+	e := setup(t, "http://scriba.test/")
+	sid := e.initSession(t, "tok-x")
+	e.kbs.remove("b")
+	if resp := e.rpc(t, "tok-x", sid, writeCall); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status %d, quería 401", resp.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Join(e.rootB, "drafts", "x.md")); !os.IsNotExist(err) {
+		t.Fatalf("escribió en la KB borrada: %v", err)
+	}
 }
 
 func TestReadTemplate(t *testing.T) {

@@ -101,17 +101,23 @@ func TestAdoptKBBackfill(t *testing.T) {
 		t.Fatalf("lectura migrada: %+v %v %v", r, ok, err)
 	}
 
-	if err := s.InsertAgentToken("nuevo", []byte("h3"), t0.Add(2*time.Hour)); err != nil {
+	if err := s.InsertAgentToken("nuevo", "", []byte("h3"), t0.Add(2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.InsertOAuthToken(OAuthToken{Name: "oauth", Hash: []byte("h4"), Now: t0, ClientID: "cliente", Expires: t0.Add(time.Hour), RefreshHash: []byte("r4"), RefreshExpires: t0.Add(2 * time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"nuevo", "oauth"} {
+	if err := s.InsertAgentToken("otro", "trabajo", []byte("h5"), t0.Add(3*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"nuevo": "ia-kb", "oauth": "ia-kb", "otro": "trabajo"} {
 		var kb string
-		if err := s.db.QueryRow("SELECT kb FROM agent_tokens WHERE name = ?", name).Scan(&kb); err != nil || kb != "ia-kb" {
+		if err := s.db.QueryRow("SELECT kb FROM agent_tokens WHERE name = ?", name).Scan(&kb); err != nil || kb != want {
 			t.Fatalf("KB del token %s: %q %v", name, kb, err)
 		}
+	}
+	if a, ok, err := s.AgentByHash([]byte("h5")); err != nil || !ok || a.KB != "trabajo" {
+		t.Fatalf("AgentByHash KB: %+v %v %v", a, ok, err)
 	}
 }
 
@@ -181,6 +187,12 @@ func TestForgetKB(t *testing.T) {
 		if err := s.AddActivity(kb, t0, "claude", "write", "a.md"); err != nil {
 			t.Fatal(err)
 		}
+		if err := s.InsertAgentToken("tok-"+kb, kb, []byte("h-"+kb), t0); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.InsertOAuthToken(OAuthToken{Name: "oauth-" + kb, KB: kb, ClientID: "c", Hash: []byte("o-" + kb), RefreshHash: []byte("r-" + kb), Now: t0, Expires: t0.Add(time.Hour), RefreshExpires: t0.Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := s.ForgetKB("b"); err != nil {
 		t.Fatal(err)
@@ -195,6 +207,11 @@ func TestForgetKB(t *testing.T) {
 		}
 		if a != 1 || b != 0 {
 			t.Fatalf("%s: a=%d b=%d", table, a, b)
+		}
+	}
+	for h, revoked := range map[string]bool{"h-a": false, "o-a": false, "h-b": true, "o-b": true} {
+		if a, ok, err := s.AgentByHash([]byte(h)); err != nil || !ok || a.Revoked != revoked {
+			t.Fatalf("token %s: %+v %v %v (revocado esperado %v)", h, a, ok, err, revoked)
 		}
 	}
 }

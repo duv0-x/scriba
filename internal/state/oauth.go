@@ -10,6 +10,7 @@ import (
 // OAuthToken es la concesión de un conector: un token de agente que expira y se renueva (ADR-010).
 type OAuthToken struct {
 	Name, ClientID               string
+	KB                           string // "" = la KB por defecto
 	Hash, RefreshHash            []byte
 	Now, Expires, RefreshExpires time.Time
 }
@@ -33,8 +34,8 @@ func (s *Store) InsertOAuthToken(t OAuthToken) error {
 		return ErrNameTaken
 	}
 	if _, err := tx.Exec(`INSERT INTO agent_tokens(name, hash, created, client_id, expires, refresh_hash, refresh_expires, kb)
-		VALUES(?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT value FROM settings WHERE key = 'default_kb'), ''))`, t.Name, t.Hash, t.Now.UnixNano(), t.ClientID, t.Expires.UnixNano(),
-		t.RefreshHash, t.RefreshExpires.UnixNano()); err != nil {
+		VALUES(?, ?, ?, ?, ?, ?, ?, `+kbOrDefault+`)`, t.Name, t.Hash, t.Now.UnixNano(), t.ClientID, t.Expires.UnixNano(),
+		t.RefreshHash, t.RefreshExpires.UnixNano(), t.KB); err != nil {
 		return err
 	}
 	return tx.Commit()

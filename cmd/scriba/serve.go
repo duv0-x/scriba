@@ -117,7 +117,6 @@ func runServe(ctx context.Context, o serveOpts) error {
 		return err
 	}
 	defer reg.Close()
-	def := reg.Default()
 
 	ln := o.ln
 	if ln == nil {
@@ -138,8 +137,7 @@ func runServe(ctx context.Context, o serveOpts) error {
 
 	mux := http.NewServeMux()
 	az.Register(mux)
-	// Hasta #47 el MCP sirve la KB por defecto del Registry.
-	mux.Handle("/mcp", mcp.Handler(mcp.Config{V: def.V, Ix: def.Ix, W: def.W, Agents: ag, PublicURL: o.publicURL, Version: version}))
+	mux.Handle("/mcp", mcp.Handler(mcp.Config{KBs: reg, Agents: ag, PublicURL: o.publicURL, Version: version}))
 	mux.Handle("/", (&web.Server{
 		KBs: reg, State: st, Key: key, Agents: ag, OAuth: az, PublicURL: o.publicURL,
 		GitHub: github.New(), Git: web.GitVault{}, ClientID: o.clientID,

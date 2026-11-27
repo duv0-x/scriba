@@ -33,8 +33,8 @@ func newGrant(clientID string) (Pair, state.OAuthToken, error) {
 		Now: now, Expires: now.Add(AccessTTL), RefreshExpires: now.Add(RefreshTTL)}, nil
 }
 
-// Grant crea la concesión del agente name para el cliente.
-func (s Store) Grant(name, clientID string) (Pair, error) {
+// Grant crea la concesión del agente name, ligada a la KB kb, para el cliente.
+func (s Store) Grant(name, kb, clientID string) (Pair, error) {
 	if !ValidName(name) {
 		return Pair{}, ErrInvalidName
 	}
@@ -42,13 +42,13 @@ func (s Store) Grant(name, clientID string) (Pair, error) {
 	if err != nil {
 		return Pair{}, err
 	}
-	t.Name = name
+	t.Name, t.KB = name, kb
 	if err := s.S.InsertOAuthToken(t); errors.Is(err, state.ErrNameTaken) {
 		return Pair{}, ErrInvalidGrant
 	} else if err != nil {
 		return Pair{}, err
 	}
-	slog.Info("conector OAuth autorizado", "agente", name)
+	slog.Info("conector OAuth autorizado", "agente", name, "kb", kb)
 	return p, nil
 }
 
