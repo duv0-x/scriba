@@ -13,6 +13,26 @@ templ readerPage(n *vault.Note, body template.HTML, headings []render.Heading, b
 	<div class="reader" data-note={ n.Path }>
 		if edit != nil {
 			@templ.JSONScript("nota-editable", edit)
+			<script data-inline-src={ asset("inline-editor.js") }>
+				// Editor en línea (ADR-014), detrás de un flag hasta scriba#55: ?inline=1 lo activa en este
+				// navegador (localStorage) y ?inline=0 lo apaga. Sin flag, el lector queda como siempre.
+				(() => {
+					let on = false;
+					try {
+						const q = new URLSearchParams(location.search).get("inline");
+						if (q === "1") localStorage.setItem("scriba.inline", "1");
+						if (q === "0") localStorage.removeItem("scriba.inline");
+						on = localStorage.getItem("scriba.inline") === "1";
+					} catch (_) {}
+					if (!on) return;
+					if (window.scribaInline) return window.scribaInline.mount();
+					if (document.querySelector("script[data-inline-bundle]")) return; // ya cargando: el bundle monta al evaluarse
+					const s = document.createElement("script");
+					s.src = document.currentScript.dataset.inlineSrc;
+					s.dataset.inlineBundle = "";
+					document.head.append(s);
+				})();
+			</script>
 		}
 		<article>
 			<div class="crumbs">{ n.Path }</div>

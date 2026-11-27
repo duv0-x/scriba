@@ -230,11 +230,18 @@ func TestLectorIncrustaEdicion(t *testing.T) {
 	if edit.Raw != editNote || edit.Base != hash(editNote) || edit.Agent != "" {
 		t.Errorf("edit = %+v", edit)
 	}
+	if !strings.Contains(body, `data-inline-src="/static/inline-editor.js?v=`) {
+		t.Error("una nota editable debe traer el cargador del editor en línea")
+	}
 
 	// Sin Writer no hay datos de edición.
 	sin, _ := newEditor(t, false)
-	if _, body := get(t, sin, "/k/principal/n/notes/hoy.md", nil); strings.Contains(body, "nota-editable") {
+	_, sinBody := get(t, sin, "/k/principal/n/notes/hoy.md", nil)
+	if strings.Contains(sinBody, "nota-editable") {
 		t.Error("sin Writer no debe incrustar nota-editable")
+	}
+	if strings.Contains(sinBody, "data-inline-src") {
+		t.Error("sin Writer no debe traer el cargador del editor en línea")
 	}
 
 	// Con presencia de un agente, va en el JSON.
