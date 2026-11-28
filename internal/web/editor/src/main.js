@@ -23,6 +23,11 @@ const TEXTOS = {
 
 let current = null; // instancia activa (una por nota)
 
+// Sobreviven a la navegación parcial (mismo documento): url de la nota → …
+const pendientes = new Map(); // promesa del PUT propio en vuelo (resuelve al terminar, tras relanzar `again`)
+const confirmados = new Map(); // último PUT 200 propio: { base, t } (eco de una instancia anterior y atrás/adelante)
+const claveBorrador = (url) => "scriba:borrador:" + url;
+
 function mount() {
   // Siempre fuera la instancia anterior (navegación parcial incluida).
   if (current) {
@@ -84,12 +89,32 @@ function mount() {
   let retry = 0;
   let lock = ""; // agente que bloquea la nota; "" = editable
   let banner = null;
+  let bannerBorrador = false;
   let echo = null; // changed web recibido con un PUT en vuelo
   const propios = new Set(); // bases que devolvieron los PUT 200 de esta pestaña
   let cabCache = null; // caché de encabezados(), invalidada en cada docChanged
   let seccionRaf = 0;
 
   const dirty = () => docNow !== saved || inflight;
+
+  // localStorage puede lanzar en modo privado: siempre en try/catch.
+  function guardarBorrador() {
+    try {
+      localStorage.setItem(claveBorrador(url), JSON.stringify({ raw: docNow, base }));
+    } catch {}
+  }
+  function leerBorrador() {
+    try {
+      return JSON.parse(localStorage.getItem(claveBorrador(url)) || "null");
+    } catch {
+      return null;
+    }
+  }
+  function borrarBorrador() {
+    try {
+      localStorage.removeItem(claveBorrador(url));
+    } catch {}
+  }
 
   const setState = (estado, texto) => {
     status.dataset.state = estado;
@@ -134,6 +159,7 @@ function mount() {
           docNow = update.state.doc.toString();
           cabCache = null;
           if (!update.transactions.some((tr) => tr.annotation(remote))) {
+            if (bannerBorrador) quitarBanner(); // el borrador queda guardado y se ofrece en la próxima visita
             clearTimeout(timer);
             timer = setTimeout(save, DEBOUNCE);
           }
@@ -148,6 +174,7 @@ function mount() {
       banner.remove();
       banner = null;
     }
+    bannerBorrador = false;
   }
 
   // Un solo banner a la vez; si hay botones, el foco va al primero.
@@ -200,6 +227,42 @@ function mount() {
         },
       },
     ]);
+  }
+
+  // Lo escrito con lock o conflicto que no llegó al servidor al navegar (ver destroy).
+  function ofrecerBorrador() {
+    const b = leerBorrador();
+    if (!b || typeof b.raw !== "string") return;
+    if (b.raw === docNow) {
+      borrarBorrador();
+      return;
+    }
+    mostrarBanner("Tienes texto sin guardar de la última vez que editaste esta nota.", [
+      {
+        label: "Recuperar",
+        onClick: () => {
+          borrarBorrador();
+          quitarBanner();
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: b.raw },
+            annotations: [remote.of(true)], // sin autosave diferido: guardamos ya, abajo
+          });
+          base = b.base || base; // si la nota cambió desde entonces, el servidor responde 409 → conflicto
+          clearTimeout(timer);
+          save();
+          view.focus();
+        },
+      },
+      {
+        label: "Descartar",
+        onClick: () => {
+          borrarBorrador();
+          quitarBanner();
+          view.focus();
+        },
+      },
+    ]);
+    bannerBorrador = true;
   }
 
   // Un agente escribe la nota: el editor se oculta y live.js sigue reproduciendo la prosa.
@@ -256,6 +319,7 @@ function mount() {
       bannerConflicto(data.raw, data.base);
     } else {
       recargarCon(data);
+      ofrecerBorrador();
     }
   }
 
@@ -281,6 +345,7 @@ function mount() {
       if (!res.ok) return;
       const data = await res.json();
       if (destroyed) return;
+      if (dirty()) return; // se escribió durante el GET
       if (data.agent) bloquearPorAgente(data.agent);
       else recargarCon(data);
     } catch {
@@ -319,6 +384,9 @@ function mount() {
       return;
     }
     inflight = true;
+    let fin;
+    const hecho = new Promise((r) => (fin = r));
+    pendientes.set(url, hecho);
     if (!destroyed) setState("saving");
     const body = JSON.stringify(force ? { content, base, force } : { content, base });
     try {
@@ -335,8 +403,10 @@ function mount() {
       if (res.ok) {
         base = data.base;
         propios.add(base);
+        confirmados.set(url, { base, t: Date.now() });
         if (propios.size > 20) propios.delete(propios.values().next().value);
         saved = content;
+        if (destroyed && content === docNow) borrarBorrador(); // destroy lo guardó con lock, pero el servidor lo aceptó
         force = "";
         retry = 0;
         if (!destroyed) setState("saved");
@@ -347,9 +417,11 @@ function mount() {
           setState("conflict");
           bannerConflicto(data.current ?? "", data.base ?? base);
         }
+        if (destroyed) guardarBorrador();
       } else if (res.status === 423) {
         paused = true;
         if (!destroyed) bloquearPorAgente(data.agent || "");
+        else guardarBorrador();
       } else if (res.status === 400 || res.status === 404 || res.status === 413) {
         if (!destroyed) setState("error", data.error || "Error al guardar"); // no reintenta hasta el siguiente cambio
       } else if (res.status >= 500) {
@@ -370,6 +442,8 @@ function mount() {
         again = false;
         save();
       }
+      if (pendientes.get(url) === hecho) pendientes.delete(url);
+      fin();
     }
   }
 
@@ -539,6 +613,22 @@ function mount() {
   }
   pedirSeccion();
 
+  // Atrás/adelante: el GET de la página pudo salir antes de que terminara el PUT propio del
+  // destroy anterior y traer un base viejo (→ 409 contra el texto propio). Espera a que no
+  // quede ninguno en vuelo y recarga si el editor sigue limpio. También si el último PUT
+  // propio, de hace menos de 10 s, no es el base de la página (el GET leyó antes de que escribiera).
+  const conf = confirmados.get(url);
+  if (pendientes.has(url) || (conf && conf.base !== nota.base && Date.now() - conf.t < 10000)) {
+    (async () => {
+      let p;
+      while ((p = pendientes.get(url))) await p;
+      if (!destroyed && !lock && !dirty()) await recargar();
+      if (!destroyed && !lock) ofrecerBorrador();
+    })();
+  } else if (!lock) {
+    ofrecerBorrador();
+  }
+
   current = {
     destroy() {
       destroyed = true;
@@ -546,10 +636,11 @@ function mount() {
       clearTimeout(retryTimer);
       clearTimeout(unlockTimer);
       if (seccionRaf) cancelAnimationFrame(seccionRaf);
-      // shortcut: con lock o conflicto no se puede guardar (423/409) y lo escrito se pierde al navegar
-      // por htmx (al cerrar la pestaña avisa beforeunload); si molesta, guardar un borrador local.
-      if (!paused && !lock && docNow !== saved) {
-        if (inflight) again = true; // el PUT en vuelo lo relanza al terminar (con flush)
+      if (docNow !== saved) {
+        // Con lock o conflicto el servidor no lo acepta (423/409): queda como borrador local
+        // y se ofrece al volver a la nota. Si el PUT final vuelve 409/423, save() hace lo mismo.
+        if (paused || lock) guardarBorrador();
+        else if (inflight) again = true; // el PUT en vuelo lo relanza al terminar (con flush)
         else save(); // destroyed → final: keepalive + ?flush=1
       }
       ctrl.abort(); // listeners y fetch de datos en vuelo
@@ -577,7 +668,7 @@ function mount() {
           echo = ev;
           return true;
         }
-        if (propios.has(ev.hash) || ev.hash === base) return true; // eco propio
+        if (propios.has(ev.hash) || ev.hash === base || ev.hash === confirmados.get(url)?.base) return true; // eco propio
       }
       ajeno();
       return true;
